@@ -7,7 +7,12 @@
   var BUILD = document.currentScript.getAttribute("data-build");
   var POLL_MS = 1500;
   var SLIDE_MIN_SECTIONS = 3;
-  var SLIDE_MAX_WORDS = 150;
+  var SLIDE_MAX_WORDS = 220;
+  var BANNERS = {
+    plan: "Claude is waiting for plan approval. Approve or give feedback in the chat.",
+    ask: "Claude is asking. Pick an option in the chat; the copy buttons grab the label.",
+    question: "Claude is waiting on you. Answer in the chat."
+  };
   var WAITING = { question: true, ask: true, plan: true };
   var SAFE_HREF = /^(https?:|mailto:|#)/i;
   var DROP_TAGS = /^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|LINK|META|BASE|FORM|INPUT|BUTTON|TEXTAREA|SELECT)$/;
@@ -28,7 +33,7 @@
     ["portfolio-showcase", "Portfolio Showcase"]
   ];
 
-  var state = { rev: null, data: null, index: 0, slides: false, slide: 0, unread: false, themeRev: null };
+  var state = { rev: null, data: null, index: 0, slides: false, eligible: false, slide: 0, unread: false, themeRev: null };
   var $ = function (id) { return document.getElementById(id); };
 
   function esc(s) {
@@ -43,10 +48,25 @@
   }
 
   // Raw HTML in the markdown is shown as text, never parsed: replies can quote untrusted content.
-  marked.use({
-    gfm: true,
-    renderer: { html: function (token) { return esc(typeof token === "string" ? token : (token.raw || token.text || "")); } }
-  });
+  var HAS_MARKED = typeof marked !== "undefined";
+  if (HAS_MARKED) {
+    marked.use({
+      gfm: true,
+      renderer: { html: function (token) { return esc(typeof token === "string" ? token : (token.raw || token.text || "")); } }
+    });
+  }
+
+  // If marked did not load, the reply is still readable as plain text.
+  function renderMarkdown(markdown) {
+    var holder = document.createElement("template");
+    if (HAS_MARKED) {
+      holder.innerHTML = marked.parse(markdown);
+      sanitize(holder.content);
+    } else {
+      holder.content.appendChild(el("pre", "", markdown));
+    }
+    return holder.content;
+  }
 
   // Second line of defence behind the renderer override and the CSP.
   function sanitize(root) {
@@ -125,8 +145,7 @@
   }
 
   function slideEligible(sections) {
-    var headed = sections.filter(function (s) { return s.firstElementChild && s.firstElementChild.tagName === "H2"; });
-    return headed.length >= SLIDE_MIN_SECTIONS &&
+    return sections.filter(isHeaded).length >= SLIDE_MIN_SECTIONS &&
       sections.every(function (s) { return wordCount(s) <= SLIDE_MAX_WORDS; });
   }
 
@@ -143,39 +162,123 @@
     $("doc").classList.toggle("has-outline", heads.length >= 3);
   }
 
-  function buildOptions(groups) {
+  function isHeaded(section) {
+    return !!section.firstElementChild && section.firstElementChild.tagName === "H2";
+  }
+
+  function optionCards(group) {
+    var box = el("div", "optgroup");
+    (group.options || []).forEach(function (opt) {
+      var card = el("div", "opt");
+      card.appendChild(el("div", "n", opt.n));
+      card.appendChild(el("div", "label", opt.label));
+      card.appendChild(copyButton(function () { return opt.label; }));
+      if (opt.description) card.appendChild(el("div", "desc", opt.description));
+      if (opt.preview) card.appendChild(el("pre", "", opt.preview));
+      box.appendChild(card);
+    });
+    return box;
+  }
+
+  // Each question's cards go under that question's heading; if the two do not line up,
+  // all cards go below the article.
+  function buildOptions(groups, sections) {
     var box = $("options");
     box.replaceChildren();
-    (groups || []).forEach(function (group) {
-      if (groups.length > 1) box.appendChild(el("h3", "", group.header));
-      (group.options || []).forEach(function (opt) {
-        var card = el("div", "opt");
-        card.appendChild(el("div", "n", opt.n));
-        card.appendChild(el("div", "label", opt.label));
-        card.appendChild(copyButton(function () { return opt.label; }));
-        if (opt.description) card.appendChild(el("div", "desc", opt.description));
-        if (opt.preview) card.appendChild(el("pre", "", opt.preview));
-        box.appendChild(card);
-      });
+    groups = groups || [];
+    var headed = sections.filter(isHeaded);
+    groups.forEach(function (group, i) {
+      if (headed.length === groups.length) {
+        headed[i].appendChild(optionCards(group));
+      } else {
+        if (groups.length > 1) box.appendChild(el("h3", "", group.header));
+        box.appendChild(optionCards(group));
+      }
     });
   }
 
+  function slideSections() {
+    return $("article").querySelectorAll(":scope > section");
+  }
+
   function showSlide() {
-    var sections = $("article").querySelectorAll(":scope > section");
+    var sections = slideSections();
     state.slide = Math.max(0, Math.min(state.slide, sections.length - 1));
     for (var i = 0; i < sections.length; i++) sections[i].classList.toggle("on", i === state.slide);
     $("slidecount").textContent = (state.slide + 1) + " / " + sections.length;
+    $("prog").style.width = ((state.slide + 1) / sections.length * 100) + "%";
     $("prev").disabled = state.slide === 0;
     $("next").disabled = state.slide === sections.length - 1;
+    window.scrollTo(0, 0);
   }
 
-  function applyView(eligible) {
-    var on = eligible && state.slides;
-    $("view").hidden = !eligible;
+  // An opening section with no heading becomes the lead slide, with the headings as an agenda.
+  function addAgenda() {
+    var sections = slideSections();
+    if (!sections.length || isHeaded(sections[0])) return;
+    var agenda = el("ol", "agenda");
+    for (var i = 1; i < sections.length; i++) {
+      if (isHeaded(sections[i])) agenda.appendChild(el("li", "", sections[i].firstElementChild.textContent));
+    }
+    sections[0].classList.add("lead");
+    sections[0].appendChild(agenda);
+  }
+
+  function applyView() {
+    var on = state.eligible && state.slides;
+    $("view").hidden = !state.eligible;
     $("view").textContent = on ? "Document" : "Slides";
+    $("view").title = on ? "Document view (D)" : "Slides view (S)";
     $("doc").classList.toggle("slides", on);
     $("slidebar").hidden = !on;
-    if (on) showSlide();
+    if (on) { addAgenda(); showSlide(); }
+  }
+
+  function setView(slides) {
+    if (!state.data || !state.eligible || state.slides === slides) return;
+    state.slides = slides;
+    try { localStorage.setItem("present.slides", slides ? "1" : "0"); } catch (e) { /* storage blocked */ }
+    draw();
+  }
+
+  // The last section holds the question; in slides that is the last slide.
+  function jumpToEnd() {
+    var sections = slideSections();
+    if (!sections.length) return;
+    if ($("doc").classList.contains("slides")) {
+      state.slide = sections.length - 1;
+      showSlide();
+    } else {
+      sections[sections.length - 1].scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function setBanner(entry, waiting, sections) {
+    var banner = $("banner");
+    banner.hidden = !waiting;
+    banner.replaceChildren();
+    if (!waiting) return;
+    banner.appendChild(document.createTextNode(BANNERS[entry.kind] || BANNERS.question));
+    if (entry.kind === "question" && sections.length >= 2) {
+      var jump = el("button", "", "Jump to the question");
+      jump.type = "button";
+      jump.addEventListener("click", jumpToEnd);
+      banner.appendChild(jump);
+    }
+  }
+
+  // A colored dot in the tab: the style's accent, or its waiting color when Claude needs an answer.
+  function setFavicon() {
+    var waiting = document.body.classList.contains("waiting");
+    var color = getComputedStyle(document.documentElement).getPropertyValue(waiting ? "--pill-wait" : "--accent").trim() || "#888888";
+    var old = document.getElementById("favicon");
+    if (old) old.remove();
+    var link = document.createElement("link");
+    link.id = "favicon";
+    link.rel = "icon";
+    link.href = "data:image/svg+xml," + encodeURIComponent(
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='" + color + "'/></svg>");
+    document.head.appendChild(link);
   }
 
   function setTitle() {
@@ -189,17 +292,13 @@
 
     document.body.classList.toggle("waiting", waiting);
     $("pill").textContent = entry.label;
-    $("banner").hidden = !waiting;
     $("meta").textContent = [d.project, d.branch, entry.time].filter(Boolean).join(" / ");
     $("count").textContent = (state.index + 1) + " / " + d.entries.length;
     $("older").disabled = state.index === 0;
     $("newer").disabled = state.index === d.entries.length - 1;
 
-    var holder = document.createElement("template");
-    holder.innerHTML = marked.parse(entry.markdown || "");
-    sanitize(holder.content);
     var article = $("article");
-    article.replaceChildren(holder.content);
+    article.replaceChildren(renderMarkdown(entry.markdown || ""));
 
     var pres = article.querySelectorAll("pre");
     for (var i = 0; i < pres.length; i++) {
@@ -210,10 +309,14 @@
     }
 
     buildOutline(article);
-    buildOptions(entry.options);
+    var sections = sectionize(article);
+    state.eligible = slideEligible(sections);
+    buildOptions(entry.options, sections);
+    setBanner(entry, waiting, sections);
     state.slide = 0;
-    applyView(slideEligible(sectionize(article)));
+    applyView();
     setTitle();
+    setFavicon();
     window.scrollTo(0, 0);
   }
 
@@ -264,6 +367,7 @@
     var known = THEMES.some(function (t) { return t[0] === id; });
     document.documentElement.setAttribute("data-theme", known ? id : THEMES[0][0]);
     $("theme").value = known ? id : THEMES[0][0];
+    setFavicon();
   }
 
   // "present.py theme <id>" reaches the page through the feed. The newest choice wins, whether it
@@ -305,16 +409,19 @@
   $("copy-all").addEventListener("click", function () {
     if (state.data) copyText(state.data.entries[state.index].markdown || "", $("copy-all"));
   });
-  $("view").addEventListener("click", function () {
-    state.slides = !state.slides;
-    try { localStorage.setItem("present.slides", state.slides ? "1" : "0"); } catch (e) { /* storage blocked */ }
-    draw();
-  });
+  $("view").addEventListener("click", function () { setView(!state.slides); });
   document.addEventListener("keydown", function (ev) {
-    if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.target.tagName === "SELECT") return;
-    if (!$("doc").classList.contains("slides")) return;
-    if (ev.key === "ArrowRight" || ev.key === "PageDown") { step(1); ev.preventDefault(); }
-    if (ev.key === "ArrowLeft" || ev.key === "PageUp") { step(-1); ev.preventDefault(); }
+    if (ev.ctrlKey || ev.metaKey || ev.altKey || /^(SELECT|BUTTON|INPUT|TEXTAREA)$/.test(ev.target.tagName)) return;
+    var key = ev.key.toLowerCase();
+    var inSlides = $("doc").classList.contains("slides");
+    if (key === "s" && !inSlides) return setView(true);
+    if (key === "d" && inSlides) return setView(false);
+    if (!inSlides) return;
+    var last = slideSections().length - 1;
+    if (key === "arrowright" || key === "pagedown" || key === " " || key === "j") { step(1); ev.preventDefault(); }
+    if (key === "arrowleft" || key === "pageup" || key === "k") { step(-1); ev.preventDefault(); }
+    if (key === "home") { state.slide = 0; showSlide(); ev.preventDefault(); }
+    if (key === "end") { state.slide = last; showSlide(); ev.preventDefault(); }
   });
   // Browsers slow timers in background tabs, so also check the moment the tab is looked at.
   document.addEventListener("visibilitychange", function () {

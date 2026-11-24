@@ -226,6 +226,8 @@
     background: var(--wait-soft); color: var(--wait);
     font-family: var(--ui-font); font-weight: 700; font-size: 14px; text-transform: var(--ui-case); letter-spacing: .06em;
   }
+  .banner button { font: inherit; font-size: 12px; margin-left: 12px; color: inherit; background: transparent;
+    border: 1px solid currentColor; border-radius: var(--radius); padding: 2px 10px; cursor: pointer; text-transform: inherit; }
   .empty { max-width: 880px; margin: 80px auto; padding: 0 24px; color: var(--muted); }
 
   /* ---------- document layout ---------- */
@@ -270,6 +272,7 @@
   .opt { display: grid; grid-template-columns: 38px 1fr auto; gap: 4px 12px; align-items: start;
     background: var(--panel); border: 1px solid var(--rule); border-top: var(--card-top); border-radius: var(--radius);
     box-shadow: var(--card-shadow); padding: 12px 14px; margin: 12px 0; }
+  .optgroup { margin: 14px 0 8px; font-size: var(--body-size); }
   .opt .n { width: 30px; height: 30px; border-radius: 50%; background: var(--badge); color: var(--badge-ink);
     font-family: var(--display); font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; }
   .opt .label { font-family: var(--display); font-weight: var(--h-weight); }
@@ -281,9 +284,18 @@
   .slides article > section { display: none; }
   .slides article > section.on { display: block; }
   .slides article h2 { font-size: calc(var(--h2-size) * 2); line-height: 1.02; padding-top: 16px; margin-top: 0; }
+  .slides article > section.on { animation: fade .18s ease-out; }
+  .slides article > section.lead > p { font-size: 1.35em; line-height: 1.4; }
+  .slides .agenda { color: var(--muted); border-top: var(--h2-rule); margin-top: 28px; padding-top: 18px; }
+  .slides .agenda li { max-width: none; }
   .slides nav.outline { display: none !important; }
-  .slidebar { display: flex; align-items: center; justify-content: center; gap: 14px; padding-top: 16px;
+  .slidebar { display: flex; align-items: center; gap: 14px; padding-top: 16px;
     font-family: var(--ui-font); font-size: 12px; font-weight: var(--ui-weight); letter-spacing: .08em; color: var(--muted); }
+  .slidebar .bar { flex: 1; height: 3px; background: var(--rule); border-radius: var(--radius); overflow: hidden; }
+  .slidebar .bar i { display: block; height: 100%; width: 0; background: var(--mark); transition: width .2s; }
+  .slidebar .keys { text-transform: var(--ui-case); font-size: 11px; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .slides article > section.on { animation: none; } .slidebar .bar i { transition: none; } }
 
   @media print {
     header.top, nav.outline, .copy, .slidebar { display: none !important; }
@@ -309,7 +321,10 @@
   <article id="article"><p class="empty">Waiting for the first page. If this stays empty, the feed file next to this page could not be read.</p></article>
   <div class="options" id="options"></div>
   <div class="slidebar" id="slidebar" hidden>
-    <button id="prev">Back</button><span class="count" id="slidecount"></span><button id="next">Next</button>
+    <button id="prev">Back</button><span class="count" id="slidecount"></span>
+    <div class="bar"><i id="prog"></i></div>
+    <span class="keys">Arrows or space move / D for document</span>
+    <button id="next">Next</button>
   </div>
 </main>
 <script src="{{MARKED_SRC}}"></script>

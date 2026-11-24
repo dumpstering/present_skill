@@ -34,7 +34,19 @@ const HOSTILE = `Bottom line with a [good link](https://example.com) and a [bad 
 \`\`\`python
 print("hi")
 \`\`\`
+
+## Three
+
+Short closing section.
 `;
+
+const ASK = JSON.stringify({
+  hook_event_name: "PreToolUse", tool_name: "AskUserQuestion", session_id: "browsertest", cwd: ROOT,
+  tool_input: { questions: [
+    { header: "Scope", question: "Which scope?", options: [{ label: "Small", description: "One file" }, { label: "Large", description: "All files" }] },
+    { header: "Timing", question: "When?", options: [{ label: "Now" }, { label: "Later", preview: "after review" }] },
+  ] },
+});
 
 function present(out, settings, args, input) {
   return execFileSync(PY, ["-I", join(ROOT, "present.py"), ...args], {
@@ -60,11 +72,26 @@ for (const [name, engine] of Object.entries(engines)) {
     page.on("console", (m) => { if (m.type() === "error") problems.push(m.text()); });
     await page.goto(pathToFileURL(join(out, "browsert.html")).href);
 
-    const rendered = await page.waitForFunction(() => document.querySelectorAll("#article h2").length === 2, null, { timeout: 8000 }).then(() => true, () => false);
+    const rendered = await page.waitForFunction(() => document.querySelectorAll("#article h2").length === 3, null, { timeout: 8000 }).then(() => true, () => false);
     check("renders markdown", rendered, rendered ? "" : await page.locator("#article").innerText());
     check("hostile HTML inert", !(await page.title()).includes("PWNED") && (await page.locator("#article img, #article script").count()) === 0
       && (await page.locator('#article a[href^="javascript"]').count()) === 0);
     check("table and code", (await page.locator("#article table td").count()) === 2 && (await page.locator("#article pre .copy").count()) === 1);
+
+    check("tab icon set", ((await page.locator("#favicon").getAttribute("href")) || "").startsWith("data:image/svg+xml,"));
+
+    await page.locator("#article h2").first().click();  // focus the page, not a control
+    await page.keyboard.press("s");
+    const slideOn = await page.evaluate(() => document.getElementById("doc").classList.contains("slides"));
+    const agenda = await page.locator("#article section.lead .agenda li").count();
+    await page.keyboard.press("ArrowRight");
+    const second = await page.locator("#slidecount").innerText();
+    await page.keyboard.press("End");
+    const lastSlide = await page.locator("#slidecount").innerText();
+    await page.keyboard.press("d");
+    const slideOff = await page.evaluate(() => !document.getElementById("doc").classList.contains("slides"));
+    check("slides: keys, agenda, progress", slideOn && agenda === 3 && second === "2 / 4" && lastSlide === "4 / 4" && slideOff,
+      JSON.stringify({ slideOn, agenda, second, lastSlide, slideOff }));
 
     await page.evaluate(() => { window.__sameDocument = true; });
     present(out, settings, ["show", "-", "--session=browsertest", "--no-open"], "Second entry, pushed while the page was open.\n");
@@ -81,6 +108,14 @@ for (const [name, engine] of Object.entries(engines)) {
     present(out, settings, ["theme", "retro-synthwave"]);
     const themed = await page.waitForFunction(() => document.documentElement.dataset.theme === "retro-synthwave", null, { timeout: 8000 }).then(() => true, () => false);
     check("present.py theme reaches the open page", themed, await page.evaluate(() => document.documentElement.dataset.theme));
+
+    // Hook mode: an AskUserQuestion payload on stdin; each question's cards sit under its heading.
+    present(out, settings, [], ASK);
+    const asked = await page.waitForFunction(() => document.querySelectorAll("#article section .opt").length === 4, null, { timeout: 8000 }).then(() => true, () => false);
+    check("question cards under their headings", asked && (await page.locator("#banner").textContent()).includes("asking")
+      && (await page.locator("#options .opt").count()) === 0, await page.locator("#banner").innerText().catch(() => ""));
+    present(out, settings, ["show", "-", "--session=browsertest", "--no-open"], "Second entry again, so later checks have plain text.\n");
+    await page.waitForFunction(() => document.getElementById("article").textContent.includes("Second entry again"), null, { timeout: 8000 }).catch(() => {});
 
     // A new build id in the feed must make the page reload itself once.
     await page.evaluate(() => { window.__sameDocument = true; });

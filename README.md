@@ -98,12 +98,19 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
   only rewrite the feed. A closed tab is not detected: use `/present open`.
 - When `template.html` or `page.js` changes, an open page reloads itself once.
 - Nothing can pull the browser to the front. A page that arrives while its
-  tab is hidden puts `(new)` in the tab title; question and plan pages show a
-  "waiting on you" banner.
+  tab is hidden puts `(new)` in the tab title. The tab icon is a dot in the
+  style's accent color that changes color when Claude is waiting on you, and
+  question and plan pages show a banner saying so, with a "Jump to the
+  question" button on long ones.
+- AskUserQuestion pages (hook mode) show each question's options as cards
+  under that question, with a copy button per option.
 - Page controls: style dropdown, Older / Newer (entries in this chat),
-  Slides / Document (offered when there are three or more `##` sections of
-  150 words or fewer; arrow keys move), Copy markdown, and a copy button on
-  each code block.
+  Slides / Document, Copy markdown, and a copy button on each code block.
+- Slides are offered when there are three or more `##` sections of 220 words
+  or fewer. An opening paragraph becomes a lead slide with the headings as an
+  agenda. Keys: `S` slides, `D` document, arrows / space / `J` / `K` to move,
+  Home and End.
+- If the markdown library fails to load, the reply is shown as plain text.
 
 ## Safety
 
