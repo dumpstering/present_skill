@@ -1,0 +1,6 @@
+out/
+present.log
+settings.json
+OFF
+node_modules/
+__pycache__/
