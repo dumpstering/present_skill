@@ -14,11 +14,13 @@
     question: "Claude is waiting on you. Answer in the chat."
   };
   var WAITING = { question: true, ask: true, plan: true };
+  var META_SEP = "  \u00b7  ";
   var SAFE_HREF = /^(https?:|mailto:|#)/i;
   var DROP_TAGS = /^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|LINK|META|BASE|FORM|INPUT|BUTTON|TEXTAREA|SELECT)$/;
 
   // Looks defined in template.html; the first is the default.
   var THEMES = [
+    ["classic", "Classic"],
     ["parks", "Retro Parks"],
     ["cyberpunk-crypto", "Cyberpunk Crypto"],
     ["editorial-magazine", "Editorial Magazine"],
@@ -33,7 +35,8 @@
     ["portfolio-showcase", "Portfolio Showcase"]
   ];
 
-  var state = { rev: null, data: null, index: 0, slides: false, eligible: false, slide: 0, unread: false, themeRev: null };
+  var state = { rev: null, data: null, index: 0, slides: false, canToggle: false, splitTag: "H2", slide: 0,
+    unread: false, themeRev: null };
   var $ = function (id) { return document.getElementById(id); };
 
   function esc(s) {
@@ -94,12 +97,17 @@
     }
   }
 
-  function copyText(text, button) {
-    function done() {
-      var old = button.textContent;
-      button.textContent = "Copied";
-      setTimeout(function () { button.textContent = old; }, 1200);
-    }
+  var toastTimer = null;
+  function toast(message) {
+    var box = $("toast");
+    box.textContent = message;
+    box.classList.add("on");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { box.classList.remove("on"); }, 1400);
+  }
+
+  function copyText(text) {
+    function done() { toast("Copied. Paste it in the chat."); }
     function fallback() {
       var ta = el("textarea");
       ta.value = text;
@@ -120,7 +128,7 @@
   function copyButton(getText) {
     var b = el("button", "copy", "Copy");
     b.type = "button";
-    b.addEventListener("click", function () { copyText(getText(), b); });
+    b.addEventListener("click", function () { copyText(getText()); });
     return b;
   }
 
@@ -129,11 +137,13 @@
     return text ? text.split(/\s+/).length : 0;
   }
 
-  // Wrap the article into one <section> per h2 (content before the first h2 is its own section).
+  // Wrap the article into one <section> per h2, or per h1 when there is no h2. Content before
+  // the first such heading is its own section.
   function sectionize(article) {
     var sections = [], current = null;
+    state.splitTag = article.querySelector("h2") ? "H2" : "H1";
     Array.prototype.slice.call(article.childNodes).forEach(function (node) {
-      if (node.nodeType === 1 && node.tagName === "H2" || !current) {
+      if (node.nodeType === 1 && node.tagName === state.splitTag || !current) {
         if (node.nodeType !== 1 && !node.textContent.trim()) return;
         current = el("section");
         sections.push(current);
@@ -163,7 +173,7 @@
   }
 
   function isHeaded(section) {
-    return !!section.firstElementChild && section.firstElementChild.tagName === "H2";
+    return !!section.firstElementChild && section.firstElementChild.tagName === state.splitTag;
   }
 
   function optionCards(group) {
@@ -177,6 +187,8 @@
       if (opt.preview) card.appendChild(el("pre", "", opt.preview));
       box.appendChild(card);
     });
+    box.appendChild(el("p", "hint",
+      'Pick it in the chat (in a terminal, press its number), or choose "Other" there to type your own answer.'));
     return box;
   }
 
@@ -209,7 +221,7 @@
     $("prog").style.width = ((state.slide + 1) / sections.length * 100) + "%";
     $("prev").disabled = state.slide === 0;
     $("next").disabled = state.slide === sections.length - 1;
-    window.scrollTo(0, 0);
+    $("article").scrollTop = 0;
   }
 
   // An opening section with no heading becomes the lead slide, with the headings as an agenda.
@@ -224,21 +236,32 @@
     sections[0].appendChild(agenda);
   }
 
+  function setKeys(on) {
+    var keys = $("keys");
+    keys.replaceChildren();
+    if (on) {
+      keys.append(el("kbd", "", "\u2190"), " ", el("kbd", "", "\u2192"), " navigate \u00a0 ", el("kbd", "", "d"), " document view");
+    } else if (state.canToggle) {
+      keys.append(el("kbd", "", "s"), " slides");
+    }
+  }
+
   function applyView() {
-    var on = state.eligible && state.slides;
-    $("view").hidden = !state.eligible;
+    var on = state.canToggle && state.slides;
+    $("view").hidden = !state.canToggle;
     $("view").textContent = on ? "Document" : "Slides";
-    $("view").title = on ? "Document view (D)" : "Slides view (S)";
+    document.body.classList.toggle("slides-on", on);
     $("doc").classList.toggle("slides", on);
     $("slidebar").hidden = !on;
+    setKeys(on);
     if (on) { addAgenda(); showSlide(); }
   }
 
+  // A manual switch holds for the page being viewed; the next page picks its own view again.
   function setView(slides) {
-    if (!state.data || !state.eligible || state.slides === slides) return;
+    if (!state.data || !state.canToggle || state.slides === slides) return;
     state.slides = slides;
-    try { localStorage.setItem("present.slides", slides ? "1" : "0"); } catch (e) { /* storage blocked */ }
-    draw();
+    draw(true);
   }
 
   // The last section holds the question; in slides that is the last slide.
@@ -283,16 +306,17 @@
 
   function setTitle() {
     var d = state.data, entry = d.entries[state.index];
-    document.title = (state.unread ? "(new) " : "") + entry.label + " - " + d.project;
+    document.title = (state.unread ? "(new) " : "") + [entry.label, d.project, d.branch].filter(Boolean).join(" \u00b7 ");
   }
 
-  function draw() {
+  // keepView: redraw the same page after a manual Slides / Document switch.
+  function draw(keepView) {
     var d = state.data, entry = d.entries[state.index];
     var waiting = !!WAITING[entry.kind] && state.index === d.entries.length - 1;
 
     document.body.classList.toggle("waiting", waiting);
     $("pill").textContent = entry.label;
-    $("meta").textContent = [d.project, d.branch, entry.time].filter(Boolean).join(" / ");
+    $("meta").textContent = [d.project, d.branch, entry.time].filter(Boolean).join(META_SEP);
     $("count").textContent = (state.index + 1) + " / " + d.entries.length;
     $("older").disabled = state.index === 0;
     $("newer").disabled = state.index === d.entries.length - 1;
@@ -310,10 +334,14 @@
 
     buildOutline(article);
     var sections = sectionize(article);
-    state.eligible = slideEligible(sections);
+    state.canToggle = sections.length >= 2;
+    if (!keepView) {
+      // Three or more short sections open as slides; everything else as a document.
+      state.slides = slideEligible(sections);
+      state.slide = 0;
+    }
     buildOptions(entry.options, sections);
     setBanner(entry, waiting, sections);
-    state.slide = 0;
     applyView();
     setTitle();
     setFavicon();
@@ -391,10 +419,7 @@
     $("theme").appendChild(option);
   });
   var savedTheme = null;
-  try {
-    state.slides = localStorage.getItem("present.slides") === "1";
-    savedTheme = localStorage.getItem("present.theme");
-  } catch (e) { /* storage blocked */ }
+  try { savedTheme = localStorage.getItem("present.theme"); } catch (e) { /* storage blocked */ }
   setTheme(savedTheme);
 
   $("theme").addEventListener("change", function () {
@@ -407,12 +432,13 @@
   $("prev").addEventListener("click", function () { step(-1); });
   $("next").addEventListener("click", function () { step(1); });
   $("copy-all").addEventListener("click", function () {
-    if (state.data) copyText(state.data.entries[state.index].markdown || "", $("copy-all"));
+    if (state.data) copyText(state.data.entries[state.index].markdown || "");
   });
   $("view").addEventListener("click", function () { setView(!state.slides); });
   document.addEventListener("keydown", function (ev) {
-    if (ev.ctrlKey || ev.metaKey || ev.altKey || /^(SELECT|BUTTON|INPUT|TEXTAREA)$/.test(ev.target.tagName)) return;
+    if (ev.ctrlKey || ev.metaKey || ev.altKey || /^(SELECT|INPUT|TEXTAREA)$/.test(ev.target.tagName)) return;
     var key = ev.key.toLowerCase();
+    if (ev.target.tagName === "BUTTON" && (key === " " || key === "enter")) return;  // the button's own action
     var inSlides = $("doc").classList.contains("slides");
     if (key === "s" && !inSlides) return setView(true);
     if (key === "d" && inSlides) return setView(false);

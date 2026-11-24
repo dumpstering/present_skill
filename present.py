@@ -25,6 +25,8 @@ CLI:
 Env knobs:
   CLAUDE_PRESENT=0       disable hook mode for this shell
   PRESENT_MIN_WORDS=200  hook mode: word threshold for plain replies
+  PRESENT_FOCUS=input    hook mode on macOS: a new tab comes forward only when Claude is
+                         waiting on you (input, the default), always, or never
   PRESENT_DRY_RUN=1      decide and log, but write and open nothing
   PRESENT_OUT=<dir>      write pages somewhere other than ./out (used by the tests)
   CLAUDE_CONFIG_DIR      honored when looking for transcripts and settings
@@ -72,6 +74,8 @@ FEED_SUFFIX = ");\n"
 
 TABLE_RE = re.compile(r"(?m)^\s*\|.*\|\s*$\n^\s*\|?\s*:?-{3,}")
 ENDS_WITH_QUESTION_RE = re.compile(r"\?[\s*_`)\]]*$")
+OPEN_HTML_RE = re.compile(
+    r"(^|[;&|]\s*|\s)(open|xdg-open|start|Start-Process|Invoke-Item|ii)\s+[^;&|]*\.html?\b", re.I)
 
 LABELS = {"reply": "Reply", "question": "Waiting on you", "ask": "Waiting on you",
           "plan": "Plan for approval"}
@@ -224,7 +228,7 @@ def read_settings():
 def theme_ids():
     """Styles the template defines; the first is the default."""
     found = re.findall(r':root\[data-theme="([a-z0-9-]+)"\]\s*\{', TEMPLATE.read_text(encoding="utf-8"))
-    return ["parks"] + [t for t in dict.fromkeys(found) if t != "parks"]
+    return ["classic"] + [t for t in dict.fromkeys(found) if t != "classic"]
 
 
 def sync_assets():
@@ -281,14 +285,27 @@ def render(session_id, cwd, kind, markdown, options=None):
     return page, is_new
 
 
-def open_page(path):
+def want_focus(kind):
+    """Whether a newly opened tab may take the foreground (macOS only; elsewhere the OS decides)."""
+    mode = os.environ.get("PRESENT_FOCUS", "input")
+    if mode == "always":
+        return True
+    if mode == "never":
+        return False
+    return kind in ("question", "ask", "plan")
+
+
+def open_page(path, focus=True):
     try:
         if sys.platform == "win32":
             os.startfile(str(path))  # default browser; no console window
+        elif sys.platform == "darwin":
+            # -g opens the tab without bringing the browser forward.
+            subprocess.run(["open"] + ([] if focus else ["-g"]) + [str(path)], check=True, timeout=8)
         else:
             webbrowser.open(path.as_uri())
         return "opened"
-    except OSError as exc:
+    except (OSError, subprocess.SubprocessError) as exc:
         return f"open failed: {exc}"
 
 
@@ -299,7 +316,8 @@ def present(session_id, cwd, kind, markdown, options=None, reason="", event="cli
         return None, "dry-run"
     path, is_new = render(session_id, cwd, kind, markdown, options)
     if open_mode == "always" or (open_mode == "auto" and is_new):
-        how = open_page(path)
+        # A page someone asked for comes forward; a hook's mirror only does when Claude is waiting.
+        how = open_page(path, focus=event == "cli" or want_focus(kind))
     else:
         how = "not opened" if is_new else "updated in place"
     log(event=event, decision="presented", kind=kind, reason=reason, how=how,
@@ -384,6 +402,14 @@ def handle_hook(payload):
         return
 
     tool_input = payload.get("tool_input") or {}
+
+    if event == "PostToolUse":
+        # Claude opened an HTML page of its own this turn: the Stop hook steps aside.
+        if OPEN_HTML_RE.search(str(tool_input.get("command") or "")):
+            OUT.mkdir(parents=True, exist_ok=True)
+            shown_marker(session_id).touch()
+            log(decision="optout-marked", **ctx)
+        return
 
     if event == "PreToolUse" and tool == "AskUserQuestion":
         md, options = ask_markdown(tool_input)

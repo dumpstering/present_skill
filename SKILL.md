@@ -56,7 +56,8 @@ Keep it in chat instead when:
 
 - Lead with the bottom line.
 - Use `##` headings only for three or more distinct sections. Three or more
-  short sections also get a Slides toggle on the page.
+  short sections (220 words or fewer each) open as slides; everything else
+  opens as a scrolling document.
 - Put the question or numbered options last.
 - Raw HTML and images are shown as text, by design. For charts or custom
   layout, write a separate HTML file.

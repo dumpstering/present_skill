@@ -7,10 +7,10 @@
 <meta http-equiv="Content-Security-Policy" content="{{CSP}}">
 <title>{{TITLE}}</title>
 <style>
-  /* Every look is a set of tokens on :root. The default (no data-theme, or "parks") is the
-     1970s NASA manual / park service Unigrid look; the rest are fixed schemes. Local fonts
-     only (CSP): each stack names the look's ideal font first, then something installed.
-     page.js lists the theme ids. */
+  /* Every look is a set of tokens on :root. The values on :root itself are the "parks" look
+     (1970s NASA manual / park service Unigrid) and act as the base the other themes override.
+     The default look is "classic", defined right after it. Local fonts only (CSP): each stack
+     names the look's ideal font first, then something installed. page.js lists the theme ids. */
   :root {
     /* color */
     --bg: #f2e8d3; --panel: #faf4e4; --ink: #2a2018; --muted: #77664f; --rule: #d9cbac;
@@ -34,14 +34,52 @@
     --pill-font: var(--display); --pill-size: 19px; --pill-weight: 800; --pill-track: -0.01em; --pill-case: uppercase;
     /* shape */
     --radius: 2px; --h2-rule: 4px solid var(--ink); --hr: 4px solid var(--ink);
-    --card-top: 4px solid var(--ink); --card-shadow: none;
+    --card-top: 4px solid var(--ink); --card-shadow: none; --card-radius: var(--radius);
+    /* details only "classic" changes */
+    --pill-ink: var(--band-ink); --pill-bg: transparent; --pill-wait-bg: transparent; --pill-pad: 0; --pill-radius: 0;
+    --band-border: 0 solid transparent; --band-blur: none;
+    --banner-edge: 8px; --banner-radius: var(--radius); --banner-case: var(--ui-case); --banner-track: .06em; --banner-size: 14px; --banner-weight: 700;
+    --bullet: var(--mark); --bullet-weight: 700; --quote-w: 4px; --edge-w: 4px; --pre-radius: var(--radius);
+    --th-ink: var(--ink); --th-rule: 2px solid var(--ink); --th-font: var(--ui-font);
   }
+  :root[data-theme="parks"] { color-scheme: light dark; }
   @media (prefers-color-scheme: dark) {
-    /* Walnut, not black: a mid-dark page with cream text. Only the default look follows the system. */
-    :root:not([data-theme]), :root[data-theme="parks"] {
+    /* Walnut, not black: a mid-dark page with cream text. */
+    :root[data-theme="parks"] {
       --bg: #4b3a2c; --panel: #58463a; --ink: #f6ecd6; --muted: #d1bf9f; --rule: #6e5947;
       --accent: #ffc24a; --accent-soft: #6a4a2a; --wait: #ffd08a; --wait-soft: #6b4424;
       --band: #33271d; --band-rule: #6e5947; --code-bg: #3d2f23;
+    }
+  }
+
+  /* The default: a quiet neutral page with a blue accent, light or dark with the system. */
+  :root:not([data-theme]), :root[data-theme="classic"] {
+    --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1f23; --muted: #6b7079; --rule: #e3e3df;
+    --accent: #2563eb; --accent-soft: #e8efff; --wait: #c2410c; --wait-soft: #fff1e6;
+    --band: color-mix(in srgb, var(--bg) 88%, transparent); --band-ink: var(--ink); --band-muted: var(--muted); --band-rule: var(--rule);
+    --band-border: 1px solid var(--rule); --band-blur: blur(8px);
+    --code-bg: #f1f1ee; --stripe: transparent; --stripe-h: 0px;
+    --mark: var(--accent); --quote: var(--accent); --edge: transparent; --badge: var(--accent-soft); --badge-ink: var(--accent);
+    --pill-wait: var(--wait); --focus: var(--accent);
+    --mono: ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+    --display: var(--sans);
+    --h-case: none; --h-weight: 700; --h1-size: 30px; --h1-track: -0.01em; --h2-size: 22px; --h2-track: 0;
+    --h3-font: var(--sans); --h3-size: 18px; --h3-weight: 700; --h3-case: none; --h3-track: 0; --h3-color: var(--ink);
+    --ui-font: var(--sans); --ui-case: none; --ui-track: 0; --ui-weight: 400;
+    --pill-font: var(--sans); --pill-size: 13px; --pill-weight: 600; --pill-track: 0; --pill-case: none;
+    --pill-ink: var(--accent); --pill-bg: var(--accent-soft); --pill-wait-bg: var(--wait-soft); --pill-pad: 2px 10px; --pill-radius: 999px;
+    --radius: 6px; --h2-rule: 1px solid var(--rule); --hr: 1px solid var(--rule);
+    --card-top: 1px solid var(--rule); --card-radius: 10px;
+    --banner-edge: 0px; --banner-radius: 10px; --banner-case: none; --banner-track: 0; --banner-size: 15px; --banner-weight: 600;
+    --bullet: var(--ink); --bullet-weight: 400; --quote-w: 3px; --edge-w: 0px; --pre-radius: 8px;
+    --th-ink: var(--muted); --th-rule: 1px solid var(--rule); --th-font: var(--sans);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]), :root[data-theme="classic"] {
+      --bg: #15171b; --panel: #1c1f24; --ink: #e6e6e3; --muted: #9096a0; --rule: #2c3038;
+      --accent: #6ea8ff; --accent-soft: #1d2a42; --wait: #ff9f5a; --wait-soft: #3a2616;
+      --code-bg: #23272e;
     }
   }
 
@@ -200,21 +238,23 @@
   /* ---------- title band + stripe ---------- */
   header.top {
     position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
-    padding: 12px 24px calc(12px + var(--stripe-h)); background: var(--band); color: var(--band-muted);
-    font-family: var(--ui-font); font-size: 12px; font-weight: var(--ui-weight); text-transform: var(--ui-case); letter-spacing: var(--ui-track);
+    padding: 10px 24px calc(10px + var(--stripe-h)); background: var(--band); color: var(--band-muted);
+    border-bottom: var(--band-border); -webkit-backdrop-filter: var(--band-blur); backdrop-filter: var(--band-blur);
+    font-family: var(--ui-font); font-size: 13px; font-weight: var(--ui-weight); text-transform: var(--ui-case); letter-spacing: var(--ui-track);
   }
   header.top::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--stripe-h); background: var(--stripe); }
   .pill { font-family: var(--pill-font); font-size: var(--pill-size); font-weight: var(--pill-weight); letter-spacing: var(--pill-track);
-    text-transform: var(--pill-case); color: var(--band-ink); }
-  .waiting .pill { color: var(--pill-wait); }
+    text-transform: var(--pill-case); color: var(--pill-ink); background: var(--pill-bg); padding: var(--pill-pad); border-radius: var(--pill-radius); }
+  .waiting .pill { color: var(--pill-wait); background: var(--pill-wait-bg); }
   header.top .spacer { flex: 1; }
+  kbd { font-family: var(--mono); font-size: 11px; text-transform: none; border: 1px solid var(--band-rule); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
   header.top button, header.top select, .copy, .slidebar button {
     font-family: var(--ui-font); font-size: 11px; font-weight: var(--ui-weight); text-transform: var(--ui-case); letter-spacing: var(--ui-track);
     background: transparent; cursor: pointer; border-radius: var(--radius); padding: 4px 10px;
   }
   header.top button, header.top select { color: var(--band-muted); border: 1px solid var(--band-rule); }
   header.top button:hover:not(:disabled), header.top select:hover { color: var(--band-ink); border-color: var(--band-muted); }
-  header.top select option { background: var(--band); color: var(--band-ink); text-transform: none; }
+  header.top select option { background: var(--panel); color: var(--ink); text-transform: none; }
   .copy, .slidebar button { color: var(--muted); border: 1px solid var(--rule); }
   .copy:hover, .slidebar button:hover:not(:disabled) { color: var(--ink); border-color: var(--muted); }
   button:disabled { opacity: .4; cursor: default; }
@@ -222,9 +262,9 @@
   .count { font-variant-numeric: tabular-nums; }
 
   .banner {
-    max-width: 880px; margin: 24px auto 0; padding: 12px 18px; border-left: 8px solid var(--mark); border-radius: var(--radius);
+    max-width: 880px; margin: 20px auto 0; padding: 12px 18px; border-left: var(--banner-edge) solid var(--mark); border-radius: var(--banner-radius);
     background: var(--wait-soft); color: var(--wait);
-    font-family: var(--ui-font); font-weight: 700; font-size: 14px; text-transform: var(--ui-case); letter-spacing: .06em;
+    font-family: var(--ui-font); font-weight: var(--banner-weight); font-size: var(--banner-size); text-transform: var(--banner-case); letter-spacing: var(--banner-track);
   }
   .banner button { font: inherit; font-size: 12px; margin-left: 12px; color: inherit; background: transparent;
     border: 1px solid currentColor; border-radius: var(--radius); padding: 2px 10px; cursor: pointer; text-transform: inherit; }
@@ -248,21 +288,21 @@
   article h3 { font-family: var(--h3-font); font-size: var(--h3-size); font-weight: var(--h3-weight); text-transform: var(--h3-case);
     letter-spacing: var(--h3-track); color: var(--h3-color); margin: 28px 0 6px; scroll-margin-top: 84px; }
   article p, article li { max-width: 74ch; }
-  article li::marker { color: var(--mark); font-weight: 700; }
+  article li::marker { color: var(--bullet); font-weight: var(--bullet-weight); }
   article a { color: var(--accent); text-underline-offset: 2px; }
   article strong { font-weight: 650; }
-  article blockquote { margin: 16px 0; padding: 4px 16px; border-left: 4px solid var(--quote); color: var(--muted); }
+  article blockquote { margin: 16px 0; padding: 4px 16px; border-left: var(--quote-w) solid var(--quote); color: var(--muted); }
   article hr { border: 0; border-top: var(--hr); margin: 32px 0; }
   article code { font-family: var(--mono); font-size: 0.86em; background: var(--code-bg); color: var(--code-ink); padding: 1px 5px; border-radius: var(--radius); }
-  article pre, .opt pre { position: relative; background: var(--code-bg); color: var(--code-ink); padding: 14px 16px; border-radius: var(--radius);
-    border-left: 4px solid var(--edge); overflow-x: auto; font-family: var(--mono); font-size: 13.5px; font-weight: 400; line-height: 1.5; }
+  article pre, .opt pre { position: relative; background: var(--code-bg); color: var(--code-ink); padding: 14px 16px; border-radius: var(--pre-radius);
+    border-left: var(--edge-w) solid var(--edge); overflow-x: auto; font-family: var(--mono); font-size: 13.5px; font-weight: 400; line-height: 1.5; }
   article pre code { background: none; padding: 0; font-size: inherit; }
   article pre .copy { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity .15s; background: var(--panel); }
   article pre:hover .copy, article pre .copy:focus-visible { opacity: 1; }
   article table { display: block; overflow-x: auto; border-collapse: collapse; margin: 18px 0; font-size: 0.86em; }
   article th, article td { border-bottom: 1px solid var(--rule); padding: 7px 16px 7px 0; text-align: left; vertical-align: top; }
-  article th { font-family: var(--ui-font); font-weight: 700; color: var(--ink); font-size: 11.5px; text-transform: uppercase;
-    letter-spacing: .08em; border-bottom: 2px solid var(--ink); }
+  article th { font-family: var(--th-font); font-weight: 650; color: var(--th-ink); font-size: 12px; text-transform: uppercase;
+    letter-spacing: .05em; border-bottom: var(--th-rule); }
   article tbody tr:hover { background: var(--panel); }
   .img-ref { color: var(--muted); font-style: italic; }
 
@@ -270,9 +310,10 @@
   .options h3 { font-family: var(--h3-font); font-size: 12px; font-weight: 700; text-transform: uppercase;
     letter-spacing: .09em; color: var(--h3-color); margin: 28px 0 8px; }
   .opt { display: grid; grid-template-columns: 38px 1fr auto; gap: 4px 12px; align-items: start;
-    background: var(--panel); border: 1px solid var(--rule); border-top: var(--card-top); border-radius: var(--radius);
-    box-shadow: var(--card-shadow); padding: 12px 14px; margin: 12px 0; }
+    background: var(--panel); border: 1px solid var(--rule); border-top: var(--card-top); border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow); padding: 12px 14px; margin: 10px 0; }
   .optgroup { margin: 14px 0 8px; font-size: var(--body-size); }
+  .hint { color: var(--muted); font-size: 14px; }
   .opt .n { width: 30px; height: 30px; border-radius: 50%; background: var(--badge); color: var(--badge-ink);
     font-family: var(--display); font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; }
   .opt .label { font-family: var(--display); font-weight: var(--h-weight); }
@@ -280,22 +321,33 @@
   .opt pre { grid-column: 2 / span 2; margin: 6px 0 0; white-space: pre-wrap; }
 
   /* ---------- slides ---------- */
-  .slides article { min-height: calc(100vh - 240px); display: flex; flex-direction: column; justify-content: center; font-size: 1.18em; }
-  .slides article > section { display: none; }
-  .slides article > section.on { display: block; }
-  .slides article h2 { font-size: calc(var(--h2-size) * 2); line-height: 1.02; padding-top: 16px; margin-top: 0; }
-  .slides article > section.on { animation: fade .18s ease-out; }
-  .slides article > section.lead > p { font-size: 1.35em; line-height: 1.4; }
-  .slides .agenda { color: var(--muted); border-top: var(--h2-rule); margin-top: 28px; padding-top: 18px; }
-  .slides .agenda li { max-width: none; }
-  .slides nav.outline { display: none !important; }
-  .slidebar { display: flex; align-items: center; gap: 14px; padding-top: 16px;
-    font-family: var(--ui-font); font-size: 12px; font-weight: var(--ui-weight); letter-spacing: .08em; color: var(--muted); }
-  .slidebar .bar { flex: 1; height: 3px; background: var(--rule); border-radius: var(--radius); overflow: hidden; }
+  /* The page becomes one screen: band on top, a centered stage that scrolls, a footer with the controls. */
+  body.slides-on { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  body.slides-on header.top { position: relative; flex: none; }
+  body.slides-on .banner { flex: none; width: min(880px, calc(100% - 48px)); margin: 16px auto 0; }
+  .doc.slides { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0; }
+  .slides article { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; align-items: center; padding: 32px 48px; font-size: 1.24em; }
+  .slides article > section { display: none; width: min(1100px, 100%); margin: auto 0; }
+  .slides article > section.on { display: block; animation: fade .18s ease-out; }
+  .slides article h1 { margin-top: 0; }
+  .slides article h2 { font-size: calc(var(--h2-size) * 1.55); line-height: 1.1; border-top: 0; padding-top: 0; margin-top: 0; }
+  .slides article h3 { font-size: calc(var(--h3-size) * 1.33); }
+  .slides article pre { font-size: 15px; }
+  .slides article p, .slides article li { max-width: none; }
+  .slides article > section.lead > p { font-size: 1.42em; line-height: 1.4; font-weight: 500; margin-bottom: 28px; }
+  .slides .agenda { color: var(--muted); font-size: 0.9em; border-top: 1px solid var(--rule); margin-top: 0; padding-top: 18px; }
+  .slides nav.outline, .slides .options:empty { display: none !important; }
+  .slides .options { width: min(1100px, calc(100% - 96px)); margin: 0 auto; }
+  .slidebar { flex: none; display: flex; align-items: center; gap: 14px; padding: 10px 24px;
+    font-family: var(--ui-font); font-size: 13px; font-weight: var(--ui-weight); color: var(--muted); }
+  .slidebar .bar { flex: 1; height: 3px; background: var(--rule); border-radius: 2px; overflow: hidden; }
   .slidebar .bar i { display: block; height: 100%; width: 0; background: var(--mark); transition: width .2s; }
-  .slidebar .keys { text-transform: var(--ui-case); font-size: 11px; }
   @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) { .slides article > section.on { animation: none; } .slidebar .bar i { transition: none; } }
+
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+    padding: 7px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 9; }
+  .toast.on { opacity: .92; }
 
   @media print {
     header.top, nav.outline, .copy, .slidebar { display: none !important; }
@@ -308,6 +360,7 @@
   <span class="pill" id="pill">Loading</span>
   <span id="meta"></span>
   <span class="spacer"></span>
+  <span id="keys"></span>
   <select id="theme" aria-label="Page style" title="Page style"></select>
   <button id="older" title="Earlier page in this session">Older</button>
   <span class="count" id="count"></span>
@@ -321,12 +374,12 @@
   <article id="article"><p class="empty">Waiting for the first page. If this stays empty, the feed file next to this page could not be read.</p></article>
   <div class="options" id="options"></div>
   <div class="slidebar" id="slidebar" hidden>
-    <button id="prev">Back</button><span class="count" id="slidecount"></span>
+    <button id="prev" aria-label="Previous slide">&larr;</button><span class="count" id="slidecount"></span>
     <div class="bar"><i id="prog"></i></div>
-    <span class="keys">Arrows or space move / D for document</span>
-    <button id="next">Next</button>
+    <button id="next" aria-label="Next slide">&rarr;</button>
   </div>
 </main>
+<div class="toast" id="toast" role="status"></div>
 <script src="{{MARKED_SRC}}"></script>
 <script src="{{PAGE_SRC}}" data-feed="{{FEED}}" data-build="{{BUILD}}"></script>
 </body>

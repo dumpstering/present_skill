@@ -9,7 +9,9 @@ access.
   transcript, so it costs no extra output.
 - Claude may also use it on its own for a long read, and keeps the bottom
   line and any question in the chat.
-- Twelve page styles, picked from a dropdown on the page or with
+- Three or more short sections open as slides; anything else opens as a
+  scrolling document. `S` and `D` switch between the two.
+- Thirteen page styles, picked from a dropdown on the page or with
   `/present theme <name>`.
 
 Runs on Windows, macOS and Linux, and works in Chrome, Edge, Firefox and
@@ -70,8 +72,9 @@ transcript, which can be another chat when several are open.
 
 ## Styles
 
-`parks` is the default: a 1970s NASA graphics manual and park service look,
-which follows your system light or dark setting. The others are fixed schemes:
+`classic` is the default: a quiet neutral page with a blue accent. `parks` is
+a 1970s NASA graphics manual and park service look. Both follow your system
+light or dark setting. The others are fixed schemes:
 `cyberpunk-crypto`, `editorial-magazine`, `luxury-premium`, `dark-tech`,
 `enterprise-saas`, `landing-conversion`, `playful-creative`, `brutalist-raw`,
 `retro-synthwave`, `organic-wellness`, `portfolio-showcase`.
@@ -106,10 +109,12 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
   under that question, with a copy button per option.
 - Page controls: style dropdown, Older / Newer (entries in this chat),
   Slides / Document, Copy markdown, and a copy button on each code block.
-- Slides are offered when there are three or more `##` sections of 220 words
-  or fewer. An opening paragraph becomes a lead slide with the headings as an
-  agenda. Keys: `S` slides, `D` document, arrows / space / `J` / `K` to move,
-  Home and End.
+- A page with three or more `##` sections of 220 words or fewer opens as
+  slides; anything else opens as a document. Sections split on `#` when there
+  is no `##`. An opening paragraph becomes a lead slide with the headings as
+  an agenda. Any page with two or more sections can be switched by hand; the
+  switch holds for that page only. Keys: `S` slides, `D` document, arrows /
+  space / `J` / `K` to move, Home and End.
 - If the markdown library fails to load, the reply is shown as plain text.
 
 ## Safety
@@ -165,15 +170,39 @@ the full path to `present.py` and `python` in place of `python3` on Windows:
     "PreToolUse": [
       {"matcher": "AskUserQuestion|ExitPlanMode",
        "hooks": [{"type": "command", "command": "python3 -I \"/full/path/to/present.py\"", "async": true, "timeout": 20}]}
+    ],
+    "PostToolUse": [
+      {"matcher": "Bash|PowerShell",
+       "hooks": [{"type": "command", "command": "python3 -I \"/full/path/to/present.py\"", "async": true, "timeout": 20}]}
     ]
   }
 }
 ```
 
+The PostToolUse hook is optional. It notices when Claude opens an HTML page of
+its own during a turn, so the Stop hook does not open a second one.
+
 `present.py off` and `present.py on` pause and resume hook mode. Env knobs:
 `CLAUDE_PRESENT=0` (off for one shell), `PRESENT_MIN_WORDS`,
-`PRESENT_DRY_RUN=1` (log the decision, write nothing). Decisions are logged to
-`present.log`.
+`PRESENT_FOCUS=input|always|never` (macOS only: whether a newly opened tab
+brings the browser forward; `input`, the default, does so only when Claude is
+waiting on you), `PRESENT_DRY_RUN=1` (log the decision, write nothing).
+Decisions are logged to `present.log`.
+
+With hook mode on, these habits in your `CLAUDE.md` make the pages read well.
+They help in the chat too:
+
+```
+## Browser presentations
+- Lead with the bottom line in the first sentence or two.
+- Use ## headings only when there are three or more distinct sections. Three or
+  more short sections render as slides; everything else as a scrolling document.
+- When you need something from me, put it last: one explicit question, or
+  numbered options.
+- Don't hand-write HTML for ordinary replies; the hook already renders them.
+- If something needs charts, diagrams or custom layout, write a self-contained
+  HTML file and open it. The hook sees that and skips its own page for the turn.
+```
 
 ## Credits and license
 

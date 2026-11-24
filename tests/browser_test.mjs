@@ -80,23 +80,32 @@ for (const [name, engine] of Object.entries(engines)) {
 
     check("tab icon set", ((await page.locator("#favicon").getAttribute("href")) || "").startsWith("data:image/svg+xml,"));
 
-    await page.locator("#article h2").first().click();  // focus the page, not a control
-    await page.keyboard.press("s");
-    const slideOn = await page.evaluate(() => document.getElementById("doc").classList.contains("slides"));
+    check("default style is classic", (await page.evaluate(() => document.documentElement.dataset.theme)) === "classic");
+
+    // Three short sections: the page opens as slides by itself.
+    const inSlides = () => page.evaluate(() => document.getElementById("doc").classList.contains("slides"));
+    const autoSlides = await inSlides();
     const agenda = await page.locator("#article section.lead .agenda li").count();
     await page.keyboard.press("ArrowRight");
     const second = await page.locator("#slidecount").innerText();
     await page.keyboard.press("End");
     const lastSlide = await page.locator("#slidecount").innerText();
     await page.keyboard.press("d");
-    const slideOff = await page.evaluate(() => !document.getElementById("doc").classList.contains("slides"));
-    check("slides: keys, agenda, progress", slideOn && agenda === 3 && second === "2 / 4" && lastSlide === "4 / 4" && slideOff,
-      JSON.stringify({ slideOn, agenda, second, lastSlide, slideOff }));
+    const docView = !(await inSlides());
+    await page.keyboard.press("s");
+    const backToSlides = await inSlides();
+    await page.keyboard.press("d");
+    check("slides: automatic, keys, agenda, progress", autoSlides && agenda === 3 && second === "2 / 4" && lastSlide === "4 / 4" && docView && backToSlides,
+      JSON.stringify({ autoSlides, agenda, second, lastSlide, docView, backToSlides }));
+
+    await page.locator("#article pre .copy").first().click({ force: true }).catch(() => {});
+    results.push(["copy shows a toast", (await page.locator("#toast.on").count()) === 1 ? true : null, "clipboard blocked in this harness"]);
 
     await page.evaluate(() => { window.__sameDocument = true; });
     present(out, settings, ["show", "-", "--session=browsertest", "--no-open"], "Second entry, pushed while the page was open.\n");
     const live = await page.waitForFunction(() => document.getElementById("article").textContent.includes("Second entry"), null, { timeout: 8000 }).then(() => true, () => false);
     check("live update without reload", live && (await page.evaluate(() => window.__sameDocument === true)), await page.locator("#count").innerText());
+    check("a short reply opens as a document", !(await inSlides()));
 
     await page.selectOption("#theme", "brutalist-raw");
     check("dropdown switches style", (await page.evaluate(() => getComputedStyle(document.body).backgroundColor)) === "rgb(255, 255, 255)");
