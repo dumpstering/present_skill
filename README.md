@@ -12,9 +12,8 @@ access.
 - Twelve page styles, picked from a dropdown on the page or with
   `/present theme <name>`.
 
-Based on "browser presentations" by Cody (pyserf), a macOS + Chrome hook
-setup. This version is a skill, runs on Windows, macOS and Linux, and works in
-Chrome, Edge, Firefox and Safari.
+Runs on Windows, macOS and Linux, and works in Chrome, Edge, Firefox and
+Safari.
 
 ## Requirements
 
@@ -75,8 +74,7 @@ transcript, which can be another chat when several are open.
 which follows your system light or dark setting. The others are fixed schemes:
 `cyberpunk-crypto`, `editorial-magazine`, `luxury-premium`, `dark-tech`,
 `enterprise-saas`, `landing-conversion`, `playful-creative`, `brutalist-raw`,
-`retro-synthwave`, `organic-wellness`, `portfolio-showcase`. Their colors and
-type rules are adapted from the aesthetics in Cody's design-craft skills.
+`retro-synthwave`, `organic-wellness`, `portfolio-showcase`.
 
 The newest choice wins, whether you made it in the dropdown or with
 `present.py theme`. The dropdown choice is kept in the browser's storage; the
@@ -172,7 +170,6 @@ the full path to `present.py` and `python` in place of `python3` on Windows:
 
 ## Credits and license
 
-- Idea and the original macOS version: Cody (pyserf).
 - Markdown rendering: [marked](https://github.com/markedjs/marked) 18.1.1,
   vendored at `vendor/marked.umd.js` from the npm tarball (sha512
   `zEGgrtUG8crk+TrMacJSVABU4DYDDkS8uqgU3ohrn/2fW9C2AEfUrO3m6IhpIpQpl7YcVpiXXC9cSMWDANT3dg==`),
