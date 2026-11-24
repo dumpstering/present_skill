@@ -15,7 +15,8 @@ access.
   `/present theme <name>`.
 
 Runs on Windows, macOS and Linux, and works in Chrome, Edge, Firefox and
-Safari.
+Safari. Based on "browser presentations" by Cody
+([pyserf](https://github.com/pyserf)).
 
 ## Requirements
 
@@ -206,6 +207,10 @@ They help in the chat too:
 
 ## Credits and license
 
+- Cody ([pyserf](https://github.com/pyserf)): the idea, the page design
+  (the `classic` style, slides, option cards) and the original macOS + Chrome
+  version this is built from. Eleven of the other styles are adapted from the
+  aesthetics in his design-craft skills.
 - Markdown rendering: [marked](https://github.com/markedjs/marked) 18.1.1,
   vendored at `vendor/marked.umd.js` from the npm tarball (sha512
   `zEGgrtUG8crk+TrMacJSVABU4DYDDkS8uqgU3ohrn/2fW9C2AEfUrO3m6IhpIpQpl7YcVpiXXC9cSMWDANT3dg==`),
