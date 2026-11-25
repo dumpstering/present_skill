@@ -109,13 +109,21 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
 - AskUserQuestion pages (hook mode) show each question's options as cards
   under that question, with a copy button per option.
 - Page controls: style dropdown, Older / Newer (entries in this chat),
-  Slides / Document, Copy markdown, and a copy button on each code block.
+  Document / Text slides / Designed slides, Fit to screen, Full screen, Copy
+  markdown, and a copy button on each code block.
 - A page with three or more `##` sections of 220 words or fewer opens as
   slides; anything else opens as a document. Sections split on `#` when there
-  is no `##`. An opening paragraph becomes a lead slide with the headings as
-  an agenda. Any page with two or more sections can be switched by hand; the
-  switch holds for that page only. Keys: `S` slides, `D` document, arrows /
-  space / `J` / `K` to move, Home and End.
+  is no `##`. Any page with two or more sections can be switched by hand.
+- Designed slides (the default slide view) map markdown structure onto
+  layouts: an opening paragraph becomes a cover with the headings as agenda
+  bubbles, bullets that open with a bold phrase become cards, a bold number
+  (`**12** open issues`) becomes a stat tile, numbered lists become step
+  bubbles, a blockquote becomes a callout and tables get a styled frame.
+  Colors come from the active style. Text slides keep the plain layout with a
+  lead slide and agenda. The last slide view you pick and Fit to screen are
+  remembered in browser storage.
+- Keys: `V` designed slides, `S` text slides, `D` document, `F` fit to screen,
+  `P` full screen, arrows / space / `J` / `K` to move, Home and End.
 - If the markdown library fails to load, the reply is shown as plain text.
 
 ## Safety

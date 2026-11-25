@@ -59,5 +59,9 @@ Keep it in chat instead when:
   short sections (220 words or fewer each) open as slides; everything else
   opens as a scrolling document.
 - Put the question or numbered options last.
+- Slides open in the designed style by default: bullets that open with a bold phrase
+  become cards, a bold number (`**12** open issues`) a stat tile, a numbered list step
+  bubbles, a blockquote a callout, and an opening paragraph the cover. `V` designed,
+  `S` text slides, `D` document, `F` fit to screen, `P` full screen.
 - Raw HTML and images are shown as text, by design. For charts or custom
   layout, write a separate HTML file.

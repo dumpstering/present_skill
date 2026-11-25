@@ -40,6 +40,27 @@ print("hi")
 Short closing section.
 `;
 
+const DECK = `Deck layouts, one of each.
+
+## Numbers
+
+- **12** open issues
+- **3.4x** faster
+
+## Steps
+
+1. Fetch
+2. Build
+3. Ship
+
+## Cards
+
+- **Fast** - opens in under a second
+- **Local** - nothing leaves the machine
+
+> One callout to close.
+`;
+
 const ASK = JSON.stringify({
   hook_event_name: "PreToolUse", tool_name: "AskUserQuestion", session_id: "browsertest", cwd: ROOT,
   tool_input: { questions: [
@@ -82,10 +103,11 @@ for (const [name, engine] of Object.entries(engines)) {
 
     check("default style is classic", (await page.evaluate(() => document.documentElement.dataset.theme)) === "classic");
 
-    // Three short sections: the page opens as slides by itself.
+    // Three short sections: the page opens as designed slides by itself, with a cover and agenda bubbles.
     const inSlides = () => page.evaluate(() => document.getElementById("doc").classList.contains("slides"));
-    const autoSlides = await inSlides();
-    const agenda = await page.locator("#article section.lead .agenda li").count();
+    const inDeck = () => page.evaluate(() => document.getElementById("doc").classList.contains("deck"));
+    const autoDeck = (await inSlides()) && (await inDeck());
+    const bubbles = await page.locator("#article section.cover .bubbles .bubble").count();
     await page.keyboard.press("ArrowRight");
     const second = await page.locator("#slidecount").innerText();
     await page.keyboard.press("End");
@@ -93,10 +115,25 @@ for (const [name, engine] of Object.entries(engines)) {
     await page.keyboard.press("d");
     const docView = !(await inSlides());
     await page.keyboard.press("s");
-    const backToSlides = await inSlides();
+    const textSlides = (await inSlides()) && !(await inDeck());
+    const agenda = await page.locator("#article section.lead .agenda li").count();
+    await page.keyboard.press("v");
+    const backToDeck = await inDeck();
     await page.keyboard.press("d");
-    check("slides: automatic, keys, agenda, progress", autoSlides && agenda === 3 && second === "2 / 4" && lastSlide === "4 / 4" && docView && backToSlides,
-      JSON.stringify({ autoSlides, agenda, second, lastSlide, docView, backToSlides }));
+    check("slides: designed by default, keys, cover, text-slide agenda, progress",
+      autoDeck && bubbles === 3 && second === "2 / 4" && lastSlide === "4 / 4" && docView && textSlides && agenda === 3 && backToDeck,
+      JSON.stringify({ autoDeck, bubbles, second, lastSlide, docView, textSlides, agenda, backToDeck }));
+
+    // Markdown structure maps onto designed layouts: bold numbers, numbered lists, bold-led bullets.
+    present(out, settings, ["show", "-", "--session=browsertest", "--no-open"], DECK);
+    await page.waitForFunction(() => document.getElementById("article").textContent.includes("Deck layouts"), null, { timeout: 8000 }).catch(() => {});
+    const layouts = await page.evaluate(() => ({
+      stats: document.querySelectorAll("#article .stat").length,
+      steps: document.querySelectorAll("#article ol.steps li").length,
+      cards: document.querySelectorAll("#article .card").length,
+      quote: document.querySelectorAll("#article blockquote.quote").length,
+    }));
+    check("designed layouts: stats, steps, cards, callout", layouts.stats === 2 && layouts.steps === 3 && layouts.cards === 2 && layouts.quote === 1, JSON.stringify(layouts));
 
     await page.locator("#article pre .copy").first().click({ force: true }).catch(() => {});
     results.push(["copy shows a toast", (await page.locator("#toast.on").count()) === 1 ? true : null, "clipboard blocked in this harness"]);
