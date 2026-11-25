@@ -63,5 +63,6 @@ Keep it in chat instead when:
   become cards, a bold number (`**12** open issues`) a stat tile, a numbered list step
   bubbles, a blockquote a callout, and an opening paragraph the cover. `V` designed,
   `S` text slides, `D` document, `F` fit to screen, `P` full screen.
+  Every reply in the chat is kept: `[` / `]` step back and forward, `H` lists them all.
 - Raw HTML and images are shown as text, by design. For charts or custom
   layout, write a separate HTML file.

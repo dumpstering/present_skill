@@ -255,6 +255,14 @@
     text-transform: var(--pill-case); color: var(--pill-ink); background: var(--pill-bg); padding: var(--pill-pad); border-radius: var(--pill-radius); }
   .waiting .pill { color: var(--pill-wait); background: var(--pill-wait-bg); }
   header.top .spacer { flex: 1; }
+  /* One line on desktop: what differs between replies (meta text, view buttons) shrinks the meta text instead of
+     wrapping, so stepping through history never moves the toolbar. Narrow screens may still wrap. */
+  @media (min-width: 901px) {
+    header.top { flex-wrap: nowrap; }
+    header.top > * { flex: none; }
+    header.top > .spacer { flex: 1 1 0; }
+    header.top > #meta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  }
   kbd { font-family: var(--mono); font-size: 11px; text-transform: none; border: 1px solid var(--band-rule); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
   header.top button, header.top select, .copy, .slidebar button {
     font-family: var(--ui-font); font-size: 11px; font-weight: var(--ui-weight); text-transform: var(--ui-case); letter-spacing: var(--ui-track);
@@ -268,6 +276,11 @@
   button:disabled { opacity: .4; cursor: default; }
   button:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
   .count { font-variant-numeric: tabular-nums; }
+  /* Fixed width so stepping from "9 / 12" to "10 / 12" never reflows the toolbar. */
+  header.top .count { display: inline-block; min-width: 7ch; text-align: center; }
+  header.top button kbd { border-color: currentColor; opacity: .7; padding: 0 3px; }
+  .slidebar #keys { font-family: var(--ui-font); font-size: 11px; color: var(--muted); white-space: nowrap; }
+  @media (max-width: 900px) { .slidebar #keys { display: none; } }
 
   .banner {
     max-width: 880px; margin: 20px auto 0; padding: 12px 18px; border-left: var(--banner-edge) solid var(--mark); border-radius: var(--banner-radius);
@@ -433,8 +446,25 @@
     padding: 7px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 9; }
   .toast.on { opacity: .92; }
 
+  /* History drawer: every stored reply in this chat, newest first. */
+  header.top button#history.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); z-index: 8; display: flex; flex-direction: column;
+    background: var(--panel); color: var(--ink); border-left: 1px solid var(--rule); box-shadow: -12px 0 32px rgba(0,0,0,.18); }
+  .drawer[hidden] { display: none; }
+  .drawer .dtop { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--rule);
+    font-family: var(--ui-font); font-size: 13px; font-weight: 600; }
+  .drawer .dtop span { flex: 1; }
+  .drawer .dtop button { font: inherit; font-size: 11px; background: transparent; color: var(--muted); border: 1px solid var(--rule);
+    border-radius: var(--radius); padding: 3px 9px; cursor: pointer; }
+  .drawer ol { list-style: none; margin: 0; padding: 6px 0; overflow-y: auto; flex: 1; }
+  .drawer li { display: flex; flex-direction: column; gap: 3px; padding: 9px 16px; cursor: pointer; border-left: 3px solid transparent; }
+  .drawer li:hover, .drawer li:focus-visible { background: var(--accent-soft); outline: none; }
+  .drawer li.on { border-left-color: var(--accent); background: var(--accent-soft); }
+  .drawer .htitle { font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+  .drawer .hmeta { font-family: var(--ui-font); font-size: 11px; color: var(--muted); }
+
   @media print {
-    header.top, nav.outline, .copy, .slidebar { display: none !important; }
+    header.top, nav.outline, .copy, .slidebar, .drawer { display: none !important; }
     .slides article > section { display: block; }
   }
 </style>
@@ -444,12 +474,12 @@
   <span class="pill" id="pill">Loading</span>
   <span id="meta"></span>
   <span class="spacer"></span>
-  <span id="keys"></span>
   <select id="theme" aria-label="Page style" title="Page style"></select>
-  <button id="older" title="Earlier page in this session">Older</button>
+  <button id="older" title="Earlier reply in this chat ([ or Shift+Left)"><kbd>[</kbd> Older</button>
   <span class="count" id="count"></span>
-  <button id="newer" title="Later page in this session">Newer</button>
-  <span class="views" id="views" hidden></span>
+  <button id="newer" title="Later reply in this chat (] or Shift+Right; Esc jumps to the newest)">Newer <kbd>]</kbd></button>
+  <button id="history" title="Every reply in this chat (press h)">History</button>
+  <span class="views" id="views"></span>
   <button id="copy-all">Copy markdown</button>
 </header>
 <div class="banner" id="banner" hidden>Claude is waiting on you. Answer in the chat; this page is a mirror.</div>
@@ -461,10 +491,15 @@
     <button id="prev" aria-label="Previous slide">&larr;</button><span class="count" id="slidecount"></span>
     <div class="bar"><i id="prog"></i></div>
     <button id="next" aria-label="Next slide">&rarr;</button>
+    <span id="keys"></span>
     <button id="fit" title="Press f">Fit to screen</button>
     <button id="full" title="Press p">Full screen</button>
   </div>
 </main>
+<aside class="drawer" id="drawer" aria-label="Replies in this chat" hidden>
+  <div class="dtop"><span>Replies in this chat</span><button id="hclose" title="Press h or Esc">Close</button></div>
+  <ol id="hlist"></ol>
+</aside>
 <div class="toast" id="toast" role="status"></div>
 <script src="{{MARKED_SRC}}"></script>
 <script src="{{PAGE_SRC}}" data-feed="{{FEED}}" data-build="{{BUILD}}"></script>
