@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/skills/present/present.py\"", "async": true, "timeout": 20}]}
+    ],
+    "PreToolUse": [
+      {"matcher": "AskUserQuestion|ExitPlanMode",
+       "hooks": [{"type": "command", "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/skills/present/present.py\"", "async": true, "timeout": 20}]}
+    ],
+    "PostToolUse": [
+      {"matcher": "Bash|PowerShell",
+       "hooks": [{"type": "command", "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/skills/present/present.py\"", "async": true, "timeout": 20}]}
+    ]
+  }
+}

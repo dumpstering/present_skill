@@ -1,0 +1,7 @@
+{
+  "name": "present",
+  "description": "Open long replies, plans and questions as a formatted page in your browser, and find loose threads across recent Claude Code, Codex and Pi sessions.",
+  "author": { "name": "dumpstering" },
+  "homepage": "https://github.com/dumpstering/present_skill",
+  "license": "MIT"
+}

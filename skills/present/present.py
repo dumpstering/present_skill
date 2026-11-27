@@ -47,11 +47,16 @@ from datetime import datetime
 from pathlib import Path
 
 HOME = Path(__file__).resolve().parent
-OUT = Path(os.environ.get("PRESENT_OUT") or HOME / "out")
+# Runtime files live apart from the code, because a plugin update replaces the code folder.
+# Claude Code gives hooks CLAUDE_PLUGIN_DATA; commands the skill runs pass the same folder as
+# PRESENT_DATA. Run by hand outside the plugin, the code folder is used.
+DATA = Path(os.environ.get("PRESENT_DATA") or os.environ.get("CLAUDE_PLUGIN_DATA") or HOME)
+OUT = Path(os.environ.get("PRESENT_OUT") or DATA / "out")
 ASSETS = "_assets"  # copied next to the pages: browsers restrict file:// pages to their own folder
-LOG = Path(os.environ.get("PRESENT_LOG") or HOME / "present.log")
-OFF = HOME / "OFF"
-SETTINGS = Path(os.environ.get("PRESENT_SETTINGS") or HOME / "settings.json")
+LOG = Path(os.environ.get("PRESENT_LOG") or DATA / "present.log")
+OFF = DATA / "OFF"
+SETTINGS = Path(os.environ.get("PRESENT_SETTINGS") or DATA / "settings.json")
+PLUGIN_HOOKS = HOME.parent.parent / "hooks" / "hooks.json"
 TEMPLATE = HOME / "template.html"
 PAGE_JS = HOME / "page.js"
 VENDOR_MARKED = HOME / "vendor" / "marked.umd.js"
@@ -452,6 +457,8 @@ def latest_page():
 
 
 def hooks_wired():
+    if PLUGIN_HOOKS.exists():
+        return f"the plugin ({PLUGIN_HOOKS})"
     for settings in (Path.cwd() / ".claude" / "settings.json", CONFIG_DIR / "settings.json"):
         try:
             if "present.py" in settings.read_text(encoding="utf-8"):
@@ -685,6 +692,10 @@ def cli(argv):
 
 
 def main():
+    try:
+        DATA.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass  # reported by whatever write fails first
     if len(sys.argv) > 1:
         return cli(sys.argv[1:])
     try:
