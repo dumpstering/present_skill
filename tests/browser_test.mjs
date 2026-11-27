@@ -61,6 +61,23 @@ const DECK = `Deck layouts, one of each.
 > One callout to close.
 `;
 
+const LONG = `A reply with sections too tall for one slide.
+
+## Many bullets
+
+${Array.from({ length: 12 }, (_, i) => `- Bullet ${i + 1} carries a full sentence of detail so the list runs well past a single screen of height, and a second clause that wraps it onto another line`).join("\n")}
+
+## Big table
+
+| Item | Owner | Status |
+|---|---|---|
+${Array.from({ length: 15 }, (_, i) => `| Row ${i + 1} | Someone | Waiting on review |`).join("\n")}
+
+## Short
+
+Closing line.
+`;
+
 const ASK = JSON.stringify({
   hook_event_name: "PreToolUse", tool_name: "AskUserQuestion", session_id: "browsertest", cwd: ROOT,
   tool_input: { questions: [
@@ -199,6 +216,37 @@ for (const [name, engine] of Object.entries(engines)) {
     writeFileSync(feedFile, readFileSync(feedFile, "utf-8").replace(/"build": "[0-9a-f]+"/, '"build": "newbuild00"').replace(/"rev": "\d+"/, '"rev": "1"'));
     const reloaded = await page.waitForFunction(() => window.__sameDocument !== true && document.getElementById("article").textContent.includes("Second entry"), null, { timeout: 8000 }).then(() => true, () => false);
     results.push(["self-reload on new build (needs sessionStorage)", reloaded ? true : null, ""]);
+
+    // A section too tall for one slide continues onto more slides; no slide scrolls or shrinks to fit.
+    present(out, settings, ["show", "-", "--session=longtest", "--no-open"], LONG);
+    const longPage = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    longPage.on("pageerror", (e) => problems.push(String(e)));
+    await longPage.goto(pathToFileURL(join(out, "longtest.html")).href);
+    await longPage.waitForFunction(() => document.getElementById("doc").classList.contains("slides"), null, { timeout: 8000 }).catch(() => {});
+    const sweep = () => longPage.evaluate(() => {
+      const stage = document.getElementById("article"), sections = stage.querySelectorAll(":scope > section"), total = sections.length, over = [], shrunk = [];
+      for (let i = 0; i < total; i++) {
+        if (i) document.getElementById("next").click();
+        if (stage.scrollHeight > stage.clientHeight + 1) over.push(i + 1);
+        if (parseFloat(sections[i].style.zoom || "1") < 0.999) shrunk.push(i + 1);
+      }
+      return { total, over, shrunk, rows: stage.querySelectorAll("tbody tr").length, items: stage.querySelectorAll("section .chips li, section > ul > li").length };
+    });
+    const paged = {};
+    for (const [mode, key] of [["designed", "v"], ["text", "s"]]) {
+      await longPage.keyboard.press(key);
+      await longPage.keyboard.press("Home");
+      paged[mode] = await sweep();
+      await longPage.keyboard.press("f");
+      await longPage.keyboard.press("Home");
+      paged[mode + "NoFit"] = await sweep();
+      await longPage.keyboard.press("f");
+    }
+    // Cover or lead slide plus three sections is 4; the long ones must spill onto extra slides
+    // without losing any bullet or table row.
+    check("long sections paginate: more slides, none scroll or shrink, nothing lost",
+      Object.values(paged).every((p) => p.total > 4 && p.over.length === 0 && p.shrunk.length === 0 && p.rows === 15 && p.items === 12),
+      JSON.stringify(paged));
 
     check("no page errors", problems.length === 0, problems.slice(0, 3).join(" | "));
   } catch (e) {
