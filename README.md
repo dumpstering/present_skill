@@ -82,7 +82,8 @@ listed in [CHANGELOG.md](CHANGELOG.md) and on the
 Releases are automated with
 [release-please](https://github.com/googleapis/release-please). Commits use
 [Conventional Commits](https://www.conventionalcommits.org) (`feat:`, `fix:`,
-`feat!:` for breaking changes). After each merge to `main`, a release PR
+`feat!:` for breaking changes). PRs are squash-merged, so each one becomes a
+single commit and a single changelog entry. After each merge to `main`, a release PR
 collects the changes, picks the next version and drafts the changelog.
 Merging that PR tags the release, publishes it on GitHub and bumps the
 `version` in `.claude-plugin/plugin.json`. Installs with auto-update on pick
