@@ -317,7 +317,7 @@ def render(session_id, cwd, kind, markdown, options=None):
         opened_marker(key).touch()  # a page from before reply files: its tab was already opened
     n = int(old.get("latest") or 0) + 1
     item = {"n": n, "kind": kind, "label": LABELS.get(kind, kind),
-            "time": f"{now:%a %b} {now.day}, {now:%H:%M}",
+            "time": f"{now:%a %b} {now.day}, {now:%H:%M}", "at": int(now.timestamp()),
             "title": reply_title(markdown), "words": len(markdown.split())}
     write_script(entry_path(key, n), ENTRY_PREFIX, dict(item, markdown=markdown, options=options or []))
 
