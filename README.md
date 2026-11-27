@@ -212,11 +212,11 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
 
 | Area | Result |
 |---|---|
-| Linux (GitHub Actions, every PR and push to `main`) | Python tests on 3.9 and 3.14; browser checks on Chromium, Firefox and WebKit; `claude plugin validate` |
+| Linux (GitHub Actions, every PR and push to `main`) | Python tests on 3.10 and 3.14; browser checks on Chromium, Firefox and WebKit; `claude plugin validate` |
 | macOS, Claude Code CLI 2.1.326 | Browser checks pass on Chromium 153 and WebKit 26.6; used day to day as a plugin |
 | Windows 11, Python 3.14, VS Code extension | Browser checks pass on Chromium 159, Firefox 159 and WebKit 27.2; used day to day |
 | Safari itself, desktop app | Not yet run. The plugin uses nothing specific to one surface |
-| Python 3.8 | Not run in CI (no current runner image); written to 3.8 syntax and library |
+| Python 3.8 and 3.9 | Not run in CI (no current runner image); written to 3.8 syntax and library |
 
 Run the checks from the repo root:
 
