@@ -78,6 +78,24 @@ ${Array.from({ length: 15 }, (_, i) => `| Row ${i + 1} | Someone | Waiting on re
 Closing line.
 `;
 
+// Plain prose and unbolded items that should still get designed layouts.
+const PROSE = `Designed slides from plain writing.
+
+## Finding
+
+The old and new versions split slides the same way. A tall section gets zoomed or scrolls, and nothing paginates.
+
+## State
+
+- Repo: a local checkout with push access and no CI
+- Tests: one browser script that runs on two engines
+
+## Plan
+
+1. Add a pagination pass before slides are shown. It measures each section at zoom 1 against the stage.
+2. Split long blocks at their items. Tables keep their header row on every part.
+`;
+
 const ASK = JSON.stringify({
   hook_event_name: "PreToolUse", tool_name: "AskUserQuestion", session_id: "browsertest", cwd: ROOT,
   tool_input: { questions: [
@@ -247,6 +265,21 @@ for (const [name, engine] of Object.entries(engines)) {
     check("long sections paginate: more slides, none scroll or shrink, nothing lost",
       Object.values(paged).every((p) => p.total > 4 && p.over.length === 0 && p.shrunk.length === 0 && p.rows === 15 && p.items === 12),
       JSON.stringify(paged));
+
+    // Prose and unbolded items still get designed layouts: a statement slide, titled cards and steps.
+    present(out, settings, ["show", "-", "--session=longtest", "--no-open"], PROSE);
+    await longPage.waitForFunction(() => document.getElementById("article").textContent.includes("plain writing"), null, { timeout: 8000 }).catch(() => {});
+    await longPage.keyboard.press("v");
+    const prose = await longPage.evaluate(() => ({
+      statement: (document.querySelector("#article .dstate > strong") || {}).textContent,
+      cardTitles: [...document.querySelectorAll("#article .card .card-h")].map((h) => h.textContent),
+      stepTitles: [...document.querySelectorAll("#article ol.steps .card-h")].map((h) => h.textContent),
+    }));
+    check("plain prose and unbolded items get designed titles",
+      prose.statement === "The old and new versions split slides the same way"
+        && prose.cardTitles.join("|") === "Repo|Tests"
+        && prose.stepTitles.join("|") === "Add a pagination pass before slides are shown|Split long blocks at their items",
+      JSON.stringify(prose));
 
     check("no page errors", problems.length === 0, problems.slice(0, 3).join(" | "));
   } catch (e) {

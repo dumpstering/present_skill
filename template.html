@@ -389,6 +389,11 @@
   .dhead .num { font: 700 14px var(--mono); color: var(--accent); background: var(--accent-soft); padding: 5px 11px; border-radius: 999px; flex: none; }
   .deck .dhead h2 { font-size: calc(var(--h2-size) * 1.8); line-height: 1.15; margin: 0; padding: 0; border: 0; letter-spacing: -0.02em; }
   .deck .dlead p, .deck p.dlead { font-size: 1.25em; line-height: 1.45; font-weight: 500; margin: 0 0 24px; max-width: 62ch; }
+  .deck p.dstate { max-width: 900px; margin: 0 0 24px; padding: 6px 0 6px 28px; border-left: 6px solid var(--accent);
+    font-size: 1.2em; line-height: 1.5; color: var(--muted); }
+  .deck p.dstate > strong:first-child { display: block; margin-bottom: 18px; color: var(--ink); font-family: var(--display);
+    font-size: 1.7em; font-weight: 700; line-height: 1.18; letter-spacing: -0.02em; }
+  .deck p.dstate:not(:has(> strong:first-child)) { color: var(--ink); font-family: var(--display); font-size: 1.6em; line-height: 1.25; }
   .deck .dpara { color: var(--muted); max-width: 70ch; margin: 0 0 16px; }
   .deck .dsub { font-family: var(--ui-font); font-size: 14px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin: 26px 0 12px; border: 0; padding: 0; }
   .cards { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); margin: 6px 0 22px; }
