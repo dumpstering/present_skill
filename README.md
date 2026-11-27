@@ -1,23 +1,31 @@
 # present
 
-A Claude Code skill that opens a long reply, plan or question as a formatted
-page in your browser. One page per chat, updated in place. Local files only:
-nothing is sent anywhere, and the page's security policy blocks all network
-access.
+[![CI](https://github.com/dumpstering/present_skill/actions/workflows/ci.yml/badge.svg)](https://github.com/dumpstering/present_skill/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/dumpstering/present_skill?sort=semver)](https://github.com/dumpstering/present_skill/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-- `/present:present` opens the previous reply. It is copied from the session
-  transcript, so it costs no extra output.
-- Claude may also use it on its own for a long read, and keeps the bottom
-  line and any question in the chat.
-- Three or more sections open as slides; anything else opens as a scrolling
-  document. A section too tall for one slide continues on the next, so slides
-  never scroll or shrink. `S` and `D` switch between the two.
-- `/present:present threads [1h|4h|1d|1w|1m]` finds work left open across recent
-  Claude Code, Codex and Pi sessions (`threads.py` reads the transcripts and git
-  state) and shows it as cards ranked by priority, with a sort toggle for quick
-  wins or newest and a copyable command to close each one.
-- Thirteen page styles, picked from a dropdown on the page or with
-  `/present:present theme <name>`.
+A Claude Code plugin that turns long replies, plans and questions into a page
+in your browser: a readable document, or slides when the reply has sections.
+One tab per chat, updated in place. Local files only. Nothing is sent
+anywhere, and the page's security policy blocks all network access.
+
+![A reply as designed slides: the cover](assets/slides-cover.png)
+
+- **Slides from plain markdown.** Three or more `##` sections open as
+  slides. Bold-led bullets become cards, bold numbers stat tiles, numbered
+  lists step bubbles. Tall sections continue on the next slide instead of
+  shrinking or scrolling.
+- **No extra tokens.** `/present:present` copies the previous reply from the
+  session transcript. With the bundled hooks, long replies open on their own.
+- **Loose threads.** `/present:present threads` reads your recent Claude
+  Code, Codex and Pi sessions and lists what was left open, ranked, with the
+  command to pick each one back up.
+- **Thirteen page styles**, keyboard, mouse and touch navigation, history of
+  every reply in the chat, and a live "12 min ago" on each one.
+
+![Numbered steps as a designed slide](assets/slides-steps.png)
+
+![The loose threads board](assets/threads-board.png)
 
 Runs on Windows, macOS and Linux, and works in Chrome, Edge, Firefox and
 Safari. Based on "browser presentations" by Cody
@@ -64,6 +72,21 @@ Pages, the chosen style, the log and the hook-mode switch live in the plugin's
 data folder (`~/.claude/plugins/data/present-present-marketplace/`), which
 survives updates and is removed when the plugin is uninstalled.
 
+## Releases and updates
+
+Versions follow [Semantic Versioning](https://semver.org) and every release is
+listed in [CHANGELOG.md](CHANGELOG.md) and on the
+[releases page](https://github.com/dumpstering/present_skill/releases).
+
+Releases are automated with
+[release-please](https://github.com/googleapis/release-please). Commits use
+[Conventional Commits](https://www.conventionalcommits.org) (`feat:`, `fix:`,
+`feat!:` for breaking changes). After each merge to `main`, a release PR
+collects the changes, picks the next version and drafts the changelog.
+Merging that PR tags the release, publishes it on GitHub and bumps the
+`version` in `.claude-plugin/plugin.json`. Installs with auto-update on pick
+the new version up on their next background check.
+
 ## Use
 
 In a chat:
@@ -76,6 +99,7 @@ In a chat:
 | `/present:present theme` | Lists the styles |
 | `/present:present theme brutalist-raw` | Switches every open page to that style |
 | `/present:present status` | Shows the current state |
+| `/present:present threads` | Loose threads from the last day (`4h`, `1w`, `1m` and so on for other windows) |
 
 From a shell (`python` on Windows, `python3` elsewhere):
 
@@ -188,11 +212,11 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
 
 | Area | Result |
 |---|---|
-| Chromium 159, Firefox 159, WebKit 27.2 (Safari's engine) | All checks in `tests/browser_test.mjs` pass, run through Playwright on Windows 11 |
-| Windows 11, Python 3.14, VS Code extension | Used day to day |
-| macOS, Linux | Not yet run. The code has no platform-specific calls beyond opening the browser |
-| Safari itself, Claude Code CLI, desktop app | Not yet run. The skill uses nothing specific to one surface |
-| Python 3.8 - 3.13 | Not yet run; written to 3.8 syntax and library |
+| Linux (GitHub Actions, every PR and push to `main`) | Python tests on 3.9 and 3.14; browser checks on Chromium, Firefox and WebKit; `claude plugin validate` |
+| macOS, Claude Code CLI 2.1.326 | Browser checks pass on Chromium 153 and WebKit 26.6; used day to day as a plugin |
+| Windows 11, Python 3.14, VS Code extension | Browser checks pass on Chromium 159, Firefox 159 and WebKit 27.2; used day to day |
+| Safari itself, desktop app | Not yet run. The plugin uses nothing specific to one surface |
+| Python 3.8 | Not run in CI (no current runner image); written to 3.8 syntax and library |
 
 Run the checks from the repo root:
 
