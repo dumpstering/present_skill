@@ -1,7 +1,7 @@
 # ADR-001: Ship present as a self-hosted Claude Code plugin
 
 **Date:** 2026-11-27T04:30:31Z
-**Status:** accepted
+**Status:** accepted (its "no version" choice is superseded by [ADR-002](002-versioned-releases.md))
 
 ## Context
 
