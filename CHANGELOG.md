@@ -5,6 +5,12 @@ All notable changes to this plugin are listed here. Releases follow
 by [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commits](https://www.conventionalcommits.org).
 
+## [1.1.0](https://github.com/dumpstering/present_skill/compare/v1.0.0...v1.1.0) (2026-11-27)
+
+### Features
+
+* Session recap tab and thread ages on the loose threads board ([#11](https://github.com/dumpstering/present_skill/pull/11))
+
 ## 1.0.0 (2026-11-27)
 
 First versioned release, as a Claude Code plugin.
