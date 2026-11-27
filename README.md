@@ -123,6 +123,8 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
 - Page controls: style dropdown, Older / Newer, Latest, History,
   Document / Text slides / Designed slides, Fit to screen, Full screen, Copy
   markdown, and a copy button on each code block.
+- The header and History show each reply's age ("12 min ago"), updated every
+  30 seconds: green while fresh, amber after 15 minutes, red after 2 hours.
 - A page with three or more `##` sections opens as slides; anything else
   opens as a document. Sections split on `#` when there is no `##`. Any page
   with two or more sections can be switched by hand.

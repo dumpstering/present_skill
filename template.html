@@ -263,6 +263,13 @@
     header.top > .spacer { flex: 1 1 0; }
     header.top > #meta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   }
+  /* Reply age: green while fresh, amber after 15 minutes, red after 2 hours. */
+  .age { --age: #1f9d55; display: inline-block; font: 600 11px var(--ui-font); padding: 2px 8px; border-radius: 999px;
+    color: var(--age); background: color-mix(in srgb, var(--age) 14%, transparent); white-space: nowrap; }
+  .age.stale { --age: #c27c00; }
+  .age.superstale { --age: #d93f3f; }
+  .age[hidden] { display: none; }
+  .drawer .hmeta .age { margin-left: 8px; }
   kbd { font-family: var(--mono); font-size: 11px; text-transform: none; border: 1px solid var(--band-rule); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
   header.top button, header.top select, .copy, .slidebar button {
     font-family: var(--ui-font); font-size: 11px; font-weight: var(--ui-weight); text-transform: var(--ui-case); letter-spacing: var(--ui-track);
@@ -478,6 +485,7 @@
 <header class="top">
   <span class="pill" id="pill">Loading</span>
   <span id="meta"></span>
+  <span id="age" class="age" hidden></span>
   <span class="spacer"></span>
   <select id="theme" aria-label="Page style" title="Page style"></select>
   <button id="older" title="Earlier reply in this chat ([ or Shift+Left)"><kbd>[</kbd> Older</button>

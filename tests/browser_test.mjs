@@ -281,6 +281,27 @@ for (const [name, engine] of Object.entries(engines)) {
         && prose.stepTitles.join("|") === "Add a pagination pass before slides are shown|Split long blocks at their items",
       JSON.stringify(prose));
 
+    // The header shows how long ago the reply was made, updates on its own, and turns amber then red.
+    const agePage = await browser.newPage();
+    agePage.on("pageerror", (e) => problems.push(String(e)));
+    await agePage.clock.install();
+    await agePage.goto(pathToFileURL(join(out, "browsert.html")).href);
+    const ageOf = () => agePage.evaluate(() => { const a = document.getElementById("age"); return a ? [a.textContent, a.className] : null; });
+    let ages = [];
+    for (let i = 0; i < 40 && !(ages[0] && ages[0][0]); i++) { await new Promise((r) => setTimeout(r, 200)); ages[0] = await ageOf(); }
+    await agePage.clock.fastForward("20:00");
+    ages[1] = await ageOf();
+    await agePage.clock.fastForward("03:00:00");
+    ages[2] = await ageOf();
+    await agePage.keyboard.press("h");
+    await new Promise((r) => setTimeout(r, 500));
+    const histAge = await agePage.evaluate(() => { const a = document.querySelector("#hlist .age"); return a && a.className; });
+    check("reply age: live, fresh then stale then super stale",
+      !!(ages[0] && ages[0][0] === "just now" && /\bfresh\b/.test(ages[0][1])
+        && ages[1] && ages[1][0] === "20 min ago" && /\bstale\b/.test(ages[1][1])
+        && ages[2] && ages[2][0] === "3 h ago" && /\bsuperstale\b/.test(ages[2][1]) && /\bsuperstale\b/.test(histAge || "")),
+      JSON.stringify({ ages, histAge }));
+
     check("no page errors", problems.length === 0, problems.slice(0, 3).join(" | "));
   } catch (e) {
     check("ran to completion", false, String(e).slice(0, 300));

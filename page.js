@@ -298,6 +298,25 @@
   }
 
   // ---------- designed slides: map markdown structure onto visual layouts ----------
+  // ---------- reply age: "12 min ago", green, then amber, then red ----------
+  var STALE_MIN = 15, SUPER_STALE_MIN = 120, AGE_TICK_MS = 30000;
+
+  // Replies stored before "at" existed have no age and show nothing.
+  function setAge(node, at) {
+    node.hidden = !at;
+    if (!at) return;
+    var min = Math.max(0, Math.floor((Date.now() / 1000 - at) / 60));
+    node.textContent = min < 1 ? "just now" : min < 60 ? min + " min ago"
+      : min < 48 * 60 ? Math.floor(min / 60) + " h ago" : Math.floor(min / 1440) + " d ago";
+    node.className = "age " + (min >= SUPER_STALE_MIN ? "superstale" : min >= STALE_MIN ? "stale" : "fresh");
+  }
+
+  function tickAges() {
+    if (state.entry) setAge($("age"), state.entry.at);
+    var spans = $("hlist").querySelectorAll(".age");
+    for (var i = 0; i < spans.length; i++) setAge(spans[i], Number(spans[i].dataset.at));
+  }
+
   function pad2(n) { return (n < 10 ? "0" : "") + n; }
 
   function firstReal(node) {
@@ -697,6 +716,7 @@
     document.body.classList.toggle("waiting", waiting);
     $("pill").textContent = entry.label;
     $("meta").textContent = [d.project, d.branch, entry.time].filter(Boolean).join(META_SEP);
+    setAge($("age"), entry.at);
     $("count").textContent = (entry.n - d.first + 1) + " / " + (d.latest - d.first + 1);
     $("older").disabled = entry.n <= d.first;
     $("newer").disabled = entry.n >= d.latest;
@@ -776,7 +796,12 @@
       li.dataset.n = item.n;
       li.tabIndex = 0;
       li.appendChild(el("span", "htitle", item.title || item.label));
-      li.appendChild(el("span", "hmeta", [item.label, item.time, item.words + " words"].join(META_SEP)));
+      var meta = el("span", "hmeta", [item.label, item.time, item.words + " words"].join(META_SEP));
+      var age = el("span", "age");
+      age.dataset.at = item.at || "";
+      setAge(age, item.at);
+      meta.appendChild(age);
+      li.appendChild(meta);
       li.addEventListener("click", function () { showReply(item.n); });
       li.addEventListener("keydown", function (ev) { if (ev.key === "Enter") showReply(item.n); });
       list.appendChild(li);
@@ -909,10 +934,12 @@
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) return;
     poll();
+    tickAges();
     if (state.unread) { state.unread = false; setTitle(); }
   });
   window.addEventListener("focus", poll);
 
   poll();
   setInterval(poll, POLL_MS);
+  setInterval(tickAges, AGE_TICK_MS);
 })();
