@@ -26,12 +26,13 @@ from pathlib import Path
 
 WINDOW_RE = re.compile(r"^(\d+)([hdwm])$")
 UNIT_SECONDS = {"h": 3600, "d": 86400, "w": 7 * 86400, "m": 30 * 86400}
-ASK_TEXT_CHARS = 300    # each user message kept in the digest
-FINAL_TEXT_CHARS = 900  # the last assistant message
-RECENT_ASKS = 3
+ASK_TEXT_CHARS = 240      # each ask kept in the digest
+OUTCOME_TEXT_CHARS = 420  # the reply that ended each turn
+TURNS_SHOWN = 10          # the first turn plus the most recent ones
+RUNNING_SECONDS = 600     # written to in the last 10 minutes: probably still running
 GIT_TIMEOUT = 5
 # Injected context, not something the user typed: command wrappers, reminders, AGENTS.md blocks.
-NOT_TYPED_RE = re.compile(r"^\s*(<|# AGENTS\.md|\[external_agent|Caveat:)")
+NOT_TYPED_RE = re.compile(r"^\s*(<(?!pasted_content)|This session is being continued from a previous conversation|# AGENTS\.md|\[external_agent|Caveat:|Another Claude session sent a message)")
 INTERRUPTED = "[Request interrupted by user"
 QUESTION_END_RE = re.compile(r"\?[\s*_`)\]]*$")
 
@@ -85,15 +86,17 @@ def epoch(stamp):
         return 0
 
 
-def session(source, sid, cwd, title, asks, final, interrupted, started, ended, resume):
-    return {"source": source, "id": sid, "cwd": cwd, "title": title, "asks": asks, "final": final,
+def session(source, sid, cwd, title, turns, interrupted, started, ended, resume):
+    """turns: [ask, outcome] pairs, the outcome being the last reply text before the next ask."""
+    final = turns[-1][1] if turns else ""
+    return {"source": source, "id": sid, "cwd": cwd, "title": title, "turns": turns, "final": final,
             "interrupted": interrupted, "ends_with_question": bool(QUESTION_END_RE.search(final or "")),
             "started": started, "ended": ended, "resume": resume}
 
 
 def read_claude(path):
     records = read_jsonl(path)
-    cwd, title, asks, final, interrupted, stamps = "", "", [], "", False, []
+    cwd, title, turns, interrupted, stamps = "", "", [], False, []
     for r in records:
         if r.get("timestamp"):
             stamps.append(epoch(r["timestamp"]))
@@ -105,22 +108,22 @@ def read_claude(path):
             if text.startswith(INTERRUPTED):
                 interrupted = True
             elif text and not NOT_TYPED_RE.match(text):
-                asks.append(text)
+                turns.append([text, ""])
                 interrupted = False
         if r.get("type") == "assistant":
             text = text_parts((r.get("message") or {}).get("content"), ("text",))
-            if text:
-                final = text
-    if not asks:
+            if text and turns:
+                turns[-1][1] = text
+    if not turns:
         return None
     sid = path.stem
-    return session("claude", sid, cwd, title or asks[0], asks, final, interrupted,
+    return session("claude", sid, cwd, title or turns[0][0], turns, interrupted,
                    min(stamps or [0]), max(stamps or [0]), f"cd {cwd} && claude --resume {sid}")
 
 
 def read_codex(path):
     records = read_jsonl(path)
-    cwd, sid, asks, final, stamps = "", path.stem, [], "", []
+    cwd, sid, turns, stamps = "", path.stem, [], []
     for r in records:
         if r.get("timestamp"):
             stamps.append(epoch(r["timestamp"]))
@@ -130,20 +133,20 @@ def read_codex(path):
         if r.get("type") == "response_item" and p.get("type") == "message":
             text = text_parts(p.get("content"))
             if p.get("role") == "user" and text and not NOT_TYPED_RE.match(text):
-                asks.append(text)
-            if p.get("role") == "assistant" and text and not NOT_TYPED_RE.match(text):
-                final = text
-        if r.get("type") == "event_msg" and p.get("type") == "task_complete" and p.get("last_agent_message"):
-            final = p["last_agent_message"]
-    if not asks:
+                turns.append([text, ""])
+            if p.get("role") == "assistant" and text and turns and not NOT_TYPED_RE.match(text):
+                turns[-1][1] = text
+        if r.get("type") == "event_msg" and p.get("type") == "task_complete" and p.get("last_agent_message") and turns:
+            turns[-1][1] = p["last_agent_message"]
+    if not turns:
         return None
-    return session("codex", sid, cwd, asks[0], asks, final, False,
+    return session("codex", sid, cwd, turns[0][0], turns, False,
                    min(stamps or [0]), max(stamps or [0]), f"cd {cwd} && codex resume {sid}")
 
 
 def read_pi(path):
     records = read_jsonl(path)
-    cwd, sid, title, asks, final, stamps = "", path.stem, "", [], "", []
+    cwd, sid, title, turns, stamps = "", path.stem, "", [], []
     for r in records:
         if r.get("timestamp"):
             stamps.append(epoch(r["timestamp"]))
@@ -157,12 +160,12 @@ def read_pi(path):
             m = r.get("message") or {}
             text = text_parts(m.get("content"))
             if m.get("role") == "user" and text and not NOT_TYPED_RE.match(text):
-                asks.append(text)
-            if m.get("role") == "assistant" and text:
-                final = text
-    if not asks:
+                turns.append([text, ""])
+            if m.get("role") == "assistant" and text and turns:
+                turns[-1][1] = text
+    if not turns:
         return None
-    return session("pi", sid, cwd, title or asks[0], asks, final, False,
+    return session("pi", sid, cwd, title or turns[0][0], turns, False,
                    min(stamps or [0]), max(stamps or [0]), f"cd {cwd} && pi --session {sid}")
 
 
@@ -229,16 +232,23 @@ def digest(since_seconds, exclude="", use_gh=True, now=None):
     out = [f"# Session digest: {len(sessions)} session(s) active since {stamp(now - since_seconds)}", ""]
     for s in sessions:
         flags = [f for f, on in (("interrupted", s["interrupted"]), ("ends with a question", s["ends_with_question"])) if on]
+        running = now - s["ended"] < RUNNING_SECONDS
         out += [f"## {s['source']} {s['id']}: {clip(s['title'], 90)}",
                 f"- folder: {s['cwd'] or 'unknown'}",
-                f"- active: {stamp(s['started'])} to {stamp(s['ended'])} (ended_epoch={s['ended']})",
-                f"- resume: `{s['resume']}`"]
+                f"- status: {'running now' if running else 'ended'}",
+                f"- active: {stamp(s['started'])} to {stamp(s['ended'])} (started_epoch={s['started']}, ended_epoch={s['ended']})",
+                f"- resume: `{s['resume']}`",
+                f"- turns: {len(s['turns'])}"]
         if flags:
             out.append("- flags: " + ", ".join(flags))
-        out.append("- first ask: " + clip(s["asks"][0], ASK_TEXT_CHARS))
-        for ask in s["asks"][1:][-RECENT_ASKS:]:
-            out.append("- later ask: " + clip(ask, ASK_TEXT_CHARS))
-        out += ["- last reply: " + (clip(s["final"], FINAL_TEXT_CHARS) or "(none)"), ""]
+        shown = list(enumerate(s["turns"], 1))
+        if len(shown) > TURNS_SHOWN:
+            shown = shown[:1] + shown[-(TURNS_SHOWN - 1):]
+            out.append(f"- ({len(s['turns']) - TURNS_SHOWN} turns in the middle not shown)")
+        for n, (ask, outcome) in shown:
+            out += [f"- turn {n} ask: {clip(ask, ASK_TEXT_CHARS)}",
+                    f"  outcome: {clip(outcome, OUTCOME_TEXT_CHARS) or '(no reply text)'}"]
+        out.append("")
 
     out += ["# Git state per folder", ""]
     for cwd, g in repos.items():

@@ -75,29 +75,42 @@ Keep it in chat instead when:
 
 ## Loose threads (`/present:present threads [1h|4h|1d|1w|1m]`)
 
-Find work left open across recent sessions and present it as a ranked board.
+Summarize every recent session and find the work left open, as one board with
+two tabs: Loose threads (ranked) and Sessions (what each one did).
 
 1. `python3 -I "${CLAUDE_SKILL_DIR}/threads.py" --since <window> --exclude <id> --out <scratch>/digest.md`
-   (`<id>` is this chat's session id). It lists every main Claude Code, Codex and Pi
-   session active in the window: first and latest asks, the last reply, flags
-   (interrupted, ends with a question), a resume command, and git state per folder
-   (uncommitted files, unpushed commits, open PRs). It only reads.
-2. Read the digest and decide what is still open. A thread is open when the session
-   stopped before the ask was done: a question or approval left waiting, an interrupted
-   step, a PR not merged, commits not pushed, a "next step" or handoff nobody took up,
-   or a failure left unresolved. A later session that finished the work closes it, so
-   check across sessions before listing one. Skip threads that are finished.
-   If the digest is over about 60 KB (a week or month), have a Sonnet subagent do this
-   step and return the board JSON.
-3. Write the board as JSON and present it:
+   (`<id>` is this chat's session id). For every main Claude Code, Codex and Pi
+   session active in the window it lists status (`running now` when written to in
+   the last 10 minutes), start and end times, each turn as the ask and the reply
+   that ended it, flags (interrupted, ends with a question) and a resume command,
+   then git state per folder (uncommitted files, unpushed commits, open PRs). It only reads.
+2. For each session, write a one-sentence summary and split its turns into topics:
+   group turns about the same thing, name the topic in a few words, and state its
+   outcome in one sentence (what was produced, decided or left). Set `status`:
+   `running` (digest says running now), `waiting` (ended on a question or approval
+   for the user), `stopped` (interrupted or ended mid-task), else `done`.
+3. Decide what is still open. A thread is open when a session stopped before the ask
+   was done: a question or approval left waiting, an interrupted step, a PR not
+   merged, commits not pushed, a "next step" or handoff nobody took up, or a failure
+   left unresolved. A later session that finished the work closes it, so check across
+   sessions first. Work in a running session is in progress, not loose.
+   If the digest is over about 60 KB (a week or month), have a Sonnet subagent do
+   steps 2 and 3 and return the board JSON.
+4. Write the board as JSON and present it:
    `present.py show <scratch>/board.json --kind threads --session=<id>`
 
 ```json
-{"title": "Loose threads, last day", "summary": "5 open threads in 3 projects.",
+{"title": "Loose threads, last day", "summary": "5 open threads across 3 projects; 9 sessions, 2 still running.",
  "threads": [{"title": "Merge PR #4 (designed titles)", "priority": "high", "effort": "quick",
    "why": "Open and tested; the skill checkout runs the PR branch until it merges.",
    "next": "gh pr merge 4 --merge", "project": "present", "source": "claude",
-   "session": "a0454805", "at": 1764213000}]}
+   "session": "a0454805-...", "at": 1764213000}],
+ "sessions": [{"session": "a0454805-...", "title": "Slide pagination", "source": "claude",
+   "project": "present", "status": "waiting", "started": 1764200000, "at": 1764213000,
+   "summary": "Paginated tall slides and shipped four follow-up features.",
+   "topics": [{"topic": "Slide pagination", "outcome": "Merged in PR #3; tall sections continue on new slides."},
+              {"topic": "Plugin packaging", "outcome": "PR #8 open, waiting on a merge decision."}],
+   "resume": "cd ~/git/present && claude --resume a0454805-..."}]}
 ```
 
 - `priority`: `high` blocks other work or risks losing work (unpushed commits, a
@@ -105,8 +118,11 @@ Find work left open across recent sessions and present it as a ranked board.
 - `effort`: `quick` (minutes), `medium` (one session), `long` (more).
 - `next`: the exact command or prompt that closes it; usually the digest's resume
   command plus what to ask for.
-- `at`: the session's `ended_epoch` from the digest. Newest sort uses it.
+- `at` and `started`: the digest's `ended_epoch` and `started_epoch`. Cards show
+  "3 h ago" from `at`, and Newest sorts by it.
+- `session`: the full session id from the digest heading. A thread with one links
+  to its session's card.
+- Include every session from the digest in `sessions`, finished ones too.
 
-The page shows one card per thread with a Priority / Quick wins / Newest sort
-toggle. In chat, give the count and the top one or two threads, plus the page path.
-
+In chat, give the thread count, the top one or two threads and how many sessions
+ran, plus the page path.
