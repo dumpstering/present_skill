@@ -306,13 +306,57 @@
     return c;
   }
 
+  // Items with no bold lead still get a title when one is plain to see: a short label before a
+  // colon ("Repo: ..."), a short first sentence with more after it, or the clause before a colon.
+  // The title is wrapped in a <strong> in place, so the item reads like "**Lead** rest".
+  var LABEL_RE = /^\s*([^:.!?]{1,32}?):\s+/;
+  var SENTENCE_END_RE = /[.!?](\s+|$)/;
+  var CLAUSE_END_RE = /:\s+/;
+  var TITLE_MAX_WORDS = 14, STATEMENT_MAX_WORDS = 24, BODY_MIN_WORDS = 5;
+  function wordsIn(text) { return text.trim() ? text.trim().split(/\s+/).length : 0; }
+
+  // Wrap everything before the first match of endRe (in a text node) in a <strong>, if that makes a
+  // title of at most maxWords with at least BODY_MIN_WORDS after it.
+  function splitTitle(holder, endRe, maxWords) {
+    var nodes = Array.prototype.slice.call(holder.childNodes), before = "";
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i], end = node.nodeType === 3 ? endRe.exec(node.textContent) : null;
+      if (!end) { before += node.textContent; continue; }
+      var title = before + node.textContent.slice(0, end.index);
+      if (wordsIn(title) > maxWords || wordsIn(holder.textContent) - wordsIn(title) < BODY_MIN_WORDS) return false;
+      var strong = el("strong");
+      for (var j = 0; j < i; j++) strong.appendChild(nodes[j]);
+      strong.appendChild(document.createTextNode(node.textContent.slice(0, end.index)));
+      node.textContent = node.textContent.slice(end.index + end[0].length);
+      holder.insertBefore(strong, node);
+      return true;
+    }
+    return false;
+  }
+
+  function deriveLead(holder, maxWords) {
+    var first = firstReal(holder);
+    var label = first && first.nodeType === 3 ? LABEL_RE.exec(first.textContent) : null;
+    if (label && wordsIn(label[1]) <= 4) {
+      var strong = el("strong", "", label[1].trim());
+      first.textContent = first.textContent.slice(label[0].length);
+      holder.insertBefore(strong, first);
+      return true;
+    }
+    maxWords = maxWords || TITLE_MAX_WORDS;
+    return splitTitle(holder, SENTENCE_END_RE, maxWords) || splitTitle(holder, CLAUSE_END_RE, maxWords);
+  }
+
   // "- **Lead** rest" -> { lead, rest }: lead is the <strong>, rest a fragment with everything after it.
   // null when the item does not open with bold text.
   function boldLead(li) {
     var holder = li.firstElementChild && li.firstElementChild.tagName === "P" && firstReal(li) === li.firstElementChild
       ? li.firstElementChild : li;
     var strong = firstReal(holder);
-    if (!strong || strong.nodeType !== 1 || strong.tagName !== "STRONG") return null;
+    if (!strong || strong.nodeType !== 1 || strong.tagName !== "STRONG") {
+      if (!deriveLead(holder)) return null;
+      strong = firstReal(holder);
+    }
     var rest = document.createDocumentFragment();
     var node = strong.nextSibling;
     while (node) { var next = node.nextSibling; rest.appendChild(node); node = next; }
@@ -405,6 +449,14 @@
     head.append(el("span", "num", pad2(num)), heading);
     var body = el("div", "dbody");
     var leadDone = false;
+    // A section of only paragraphs opens on a statement: its first sentence as a headline.
+    var prose = kids.every(function (n) { return n.tagName === "P" || n.tagName === "HR"; });
+    if (prose && kids[0] && kids[0].tagName === "P") {
+      deriveLead(kids[0], STATEMENT_MAX_WORDS);
+      kids[0].className = "dstate";
+      body.appendChild(kids.shift());
+      leadDone = true;
+    }
     kids.forEach(function (node) {
       var tag = node.tagName;
       if (tag === "HR") return;

@@ -135,7 +135,10 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
   bubbles, bullets that open with a bold phrase become cards, a bold number
   (`**12** open issues`) becomes a stat tile, numbered lists become step
   bubbles, a blockquote becomes a callout and tables get a styled frame.
-  Colors come from the active style. Text slides keep the plain layout with a
+  Items without a bold lead still get a title from a short `Label:` prefix,
+  a short first sentence, or the clause before a colon. A section of only
+  paragraphs opens on its first sentence as a headline. Colors come from the
+  active style. Text slides keep the plain layout with a
   lead slide and agenda. The last slide view you pick and Fit to screen are
   remembered in browser storage.
 - Keys: `V` designed slides, `S` text slides, `D` document, `F` fit to screen,
