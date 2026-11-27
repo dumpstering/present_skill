@@ -302,6 +302,31 @@ for (const [name, engine] of Object.entries(engines)) {
         && ages[2] && ages[2][0] === "3 h ago" && /\bsuperstale\b/.test(ages[2][1]) && /\bsuperstale\b/.test(histAge || "")),
       JSON.stringify({ ages, histAge }));
 
+    // Loose threads: a JSON board renders as cards with a sort toggle.
+    const board = join(out, "board.json");
+    writeFileSync(board, JSON.stringify({ title: "Loose threads, last day", summary: "3 open threads in 2 projects.", threads: [
+      { title: "Low and quick", priority: "low", effort: "quick", at: 300, next: "git push" },
+      { title: "High and long", priority: "high", effort: "long", at: 100, why: "Blocks the release." },
+      { title: "Medium and newest", priority: "medium", effort: "medium", at: 900, project: "present", source: "claude" },
+    ] }));
+    present(out, settings, ["show", board, "--kind", "threads", "--session=boardtest", "--no-open"]);
+    const boardPage = await browser.newPage();
+    boardPage.on("pageerror", (e) => problems.push(String(e)));
+    await boardPage.goto(pathToFileURL(join(out, "boardtes.html")).href);
+    await boardPage.waitForFunction(() => document.querySelectorAll("#article .thread").length === 3, null, { timeout: 8000 }).catch(() => {});
+    const order = () => boardPage.evaluate(() => [...document.querySelectorAll("#article .thread .ttitle")].map((t) => t.textContent.split(" ")[0]).join(","));
+    const orders = { priority: await order() };
+    await boardPage.click('#article .tsort button[data-sort="effort"]');
+    orders.effort = await order();
+    await boardPage.click('#article .tsort button[data-sort="newest"]');
+    orders.newest = await order();
+    orders.copy = await boardPage.locator("#article .thread .tnext .copy").count();
+    orders.label = await boardPage.locator("#pill").innerText();
+    check("loose threads board: cards, sort toggle, copyable next step",
+      orders.priority === "High,Medium,Low" && orders.effort === "Low,Medium,High" && orders.newest === "Medium,Low,High"
+        && orders.copy === 1 && /loose threads/i.test(orders.label),
+      JSON.stringify(orders));
+
     check("no page errors", problems.length === 0, problems.slice(0, 3).join(" | "));
   } catch (e) {
     check("ran to completion", false, String(e).slice(0, 300));

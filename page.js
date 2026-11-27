@@ -317,6 +317,54 @@
     for (var i = 0; i < spans.length; i++) setAge(spans[i], Number(spans[i].dataset.at));
   }
 
+  // ---------- loose threads: a board of cards with a sort toggle ----------
+  var SORT_KEY = "present.threadSort";
+  var SORTS = [["priority", "Priority"], ["effort", "Quick wins"], ["newest", "Newest"]];
+  var RANK = { high: 0, medium: 1, low: 2, quick: 0, long: 2 };
+
+  function sortThreads(threads, by) {
+    return threads.slice().sort(function (a, b) {
+      var p = RANK[a.priority] - RANK[b.priority], e = RANK[a.effort] - RANK[b.effort], n = (b.at || 0) - (a.at || 0);
+      return by === "effort" ? e || p || n : by === "newest" ? n || p || e : p || e || n;
+    });
+  }
+
+  function threadCard(t) {
+    var card = el("div", "thread p-" + t.priority), tags = el("div", "ttags");
+    tags.append(el("span", "tag pri", t.priority), el("span", "tag", t.effort));
+    [t.project, t.source].filter(Boolean).forEach(function (x) { tags.appendChild(el("span", "tag", x)); });
+    card.append(tags, el("div", "ttitle", t.title));
+    if (t.why) card.appendChild(el("div", "twhy", t.why));
+    if (t.next) {
+      var next = el("div", "tnext");
+      next.append(el("code", "", t.next), copyButton(function () { return t.next; }));
+      card.appendChild(next);
+    }
+    return card;
+  }
+
+  function buildBoard(board) {
+    var box = el("div", "board"), bar = el("div", "tsort"), list = el("div", "threads");
+    var by = storeGet(SORT_KEY) || "priority";
+    function fill() {
+      list.replaceChildren.apply(list, sortThreads(board.threads || [], by).map(threadCard));
+      for (var i = 0; i < bar.children.length; i++) bar.children[i].classList.toggle("on", bar.children[i].dataset.sort === by);
+    }
+    SORTS.forEach(function (s) {
+      var b = el("button", "", s[1]);
+      b.type = "button";
+      b.dataset.sort = s[0];
+      b.addEventListener("click", function () { by = s[0]; storeSet(SORT_KEY, by); fill(); });
+      bar.appendChild(b);
+    });
+    box.appendChild(el("h1", "", board.title || "Loose threads"));
+    if (board.summary) box.appendChild(el("p", "tsummary", board.summary));
+    if (!(board.threads || []).length) box.appendChild(el("p", "tsummary", "Nothing left open."));
+    box.append(bar, list);
+    fill();
+    return box;
+  }
+
   function pad2(n) { return (n < 10 ? "0" : "") + n; }
 
   function firstReal(node) {
@@ -723,7 +771,7 @@
     markCurrent();
 
     var article = $("article");
-    article.replaceChildren(renderMarkdown(entry.markdown || ""));
+    article.replaceChildren(entry.board ? buildBoard(entry.board) : renderMarkdown(entry.markdown || ""));
 
     var pres = article.querySelectorAll("pre");
     for (var i = 0; i < pres.length; i++) {

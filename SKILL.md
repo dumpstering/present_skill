@@ -1,7 +1,7 @@
 ---
 name: present
-description: Open a long reply, plan or question as a formatted page in the user's browser (one tab per chat, updated in place, local files only). Optional. Use for "/present", "open that in the browser", "show me that as a page", or on your own when a read-only reply would run long - past about 400 words, a wide table, or several sections - and the user has not said to keep it in chat.
-argument-hint: "optional: last (default: previous reply) | back N | open | theme [name] | on | off | status | prune"
+description: Open a long reply, plan or question as a formatted page in the user's browser (one tab per chat, updated in place, local files only), or a board of loose threads left open across recent Claude Code, Codex and Pi sessions. Optional. Use for "/present", "/present threads", "what did I leave open", "loose threads", "open that in the browser", "show me that as a page", or on your own when a read-only reply would run long - past about 400 words, a wide table, or several sections - and the user has not said to keep it in chat.
+argument-hint: "optional: last (default: previous reply) | back N | threads [1h|4h|1d|1w|1m] | open | theme [name] | on | off | status | prune"
 ---
 
 # Present
@@ -28,6 +28,7 @@ the reply in chat.
 |---|---|
 | none, `last` | `present.py turn --session=<id>` - the previous reply, read from the transcript |
 | `back N` | `present.py turn --back N --session=<id>` - N replies back |
+| `threads [window]` | see "Loose threads" below; window defaults to `1d` |
 | `open` | `present.py last` - reopen the newest page |
 | `theme` | `present.py theme` - list the page styles |
 | `theme <name>` | `present.py theme <name>` - switch every open page to that style |
@@ -66,3 +67,41 @@ Keep it in chat instead when:
   Every reply in the chat is kept: `[` / `]` step back and forward, `H` lists them all.
 - Raw HTML and images are shown as text, by design. For charts or custom
   layout, write a separate HTML file.
+
+## Loose threads (`/present threads [1h|4h|1d|1w|1m]`)
+
+Find work left open across recent sessions and present it as a ranked board.
+
+1. `python3 -I "<base directory>/threads.py" --since <window> --exclude <id> --out <scratch>/digest.md`
+   (`<id>` is this chat's session id). It lists every main Claude Code, Codex and Pi
+   session active in the window: first and latest asks, the last reply, flags
+   (interrupted, ends with a question), a resume command, and git state per folder
+   (uncommitted files, unpushed commits, open PRs). It only reads.
+2. Read the digest and decide what is still open. A thread is open when the session
+   stopped before the ask was done: a question or approval left waiting, an interrupted
+   step, a PR not merged, commits not pushed, a "next step" or handoff nobody took up,
+   or a failure left unresolved. A later session that finished the work closes it, so
+   check across sessions before listing one. Skip threads that are finished.
+   If the digest is over about 60 KB (a week or month), have a Sonnet subagent do this
+   step and return the board JSON.
+3. Write the board as JSON and present it:
+   `present.py show <scratch>/board.json --kind threads --session=<id>`
+
+```json
+{"title": "Loose threads, last day", "summary": "5 open threads in 3 projects.",
+ "threads": [{"title": "Merge PR #4 (designed titles)", "priority": "high", "effort": "quick",
+   "why": "Open and tested; the skill checkout runs the PR branch until it merges.",
+   "next": "gh pr merge 4 --merge", "project": "present", "source": "claude",
+   "session": "a0454805", "at": 1764213000}]}
+```
+
+- `priority`: `high` blocks other work or risks losing work (unpushed commits, a
+  question someone is waiting on); `medium` is real but can wait; `low` is nice to have.
+- `effort`: `quick` (minutes), `medium` (one session), `long` (more).
+- `next`: the exact command or prompt that closes it; usually the digest's resume
+  command plus what to ask for.
+- `at`: the session's `ended_epoch` from the digest. Newest sort uses it.
+
+The page shows one card per thread with a Priority / Quick wins / Newest sort
+toggle. In chat, give the count and the top one or two threads, plus the page path.
+
