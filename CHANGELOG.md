@@ -7,11 +7,9 @@ by [release-please](https://github.com/googleapis/release-please) from
 
 ## [1.1.0](https://github.com/dumpstering/present_skill/compare/v1.0.0...v1.1.0) (2026-11-27)
 
-
 ### Features
 
-* session recap tab and thread ages on the loose threads board ([c5b2bf5](https://github.com/dumpstering/present_skill/commit/c5b2bf5d2aee355dbaa107e74dcfb7476f1dd4b5))
-* session recap tab and thread ages on the loose threads board ([775d21c](https://github.com/dumpstering/present_skill/commit/775d21ca5ae357b4c4888a12991e8d5ef85a0c76))
+* Session recap tab and thread ages on the loose threads board ([#11](https://github.com/dumpstering/present_skill/pull/11))
 
 ## 1.0.0 (2026-11-27)
 
