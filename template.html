@@ -270,6 +270,25 @@
   .age.superstale { --age: #d93f3f; }
   .age[hidden] { display: none; }
   .drawer .hmeta .age { margin-left: 8px; }
+  /* Loose threads board: one card per open thread, colored by priority. */
+  .tsummary { color: var(--muted); }
+  .tsort { display: inline-flex; margin: 4px 0 18px; }
+  .tsort button { font: 500 13px var(--ui-font); padding: 5px 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--rule); cursor: pointer; }
+  .tsort button + button { border-left-width: 0; }
+  .tsort button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  .tsort button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+  .tsort button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .threads { display: grid; gap: 14px; }
+  .thread { --p: #1f9d55; background: var(--panel); border: 1px solid var(--rule); border-left: 5px solid var(--p); border-radius: var(--radius); padding: 14px 18px; }
+  .thread.p-high { --p: #d93f3f; }
+  .thread.p-medium { --p: #c27c00; }
+  .ttags { display: flex; flex-wrap: wrap; gap: 6px; font: 600 11px var(--ui-font); text-transform: uppercase; letter-spacing: .05em; }
+  .tag { padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--muted); }
+  .tag.pri { background: color-mix(in srgb, var(--p) 16%, transparent); color: var(--p); }
+  .ttitle { font-family: var(--display); font-weight: 700; font-size: 1.12em; margin: 8px 0 4px; }
+  .twhy { color: var(--muted); }
+  .tnext { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; }
+  .tnext code { flex: 1; padding: 8px 10px; white-space: pre-wrap; word-break: break-all; }
   kbd { font-family: var(--mono); font-size: 11px; text-transform: none; border: 1px solid var(--band-rule); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
   header.top button, header.top select, .copy, .slidebar button {
     font-family: var(--ui-font); font-size: 11px; font-weight: var(--ui-weight); text-transform: var(--ui-case); letter-spacing: var(--ui-track);

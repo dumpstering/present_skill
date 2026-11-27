@@ -12,6 +12,10 @@ access.
 - Three or more sections open as slides; anything else opens as a scrolling
   document. A section too tall for one slide continues on the next, so slides
   never scroll or shrink. `S` and `D` switch between the two.
+- `/present threads [1h|4h|1d|1w|1m]` finds work left open across recent
+  Claude Code, Codex and Pi sessions (`threads.py` reads the transcripts and git
+  state) and shows it as cards ranked by priority, with a sort toggle for quick
+  wins or newest and a copyable command to close each one.
 - Thirteen page styles, picked from a dropdown on the page or with
   `/present theme <name>`.
 

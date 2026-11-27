@@ -10,6 +10,7 @@ the first call opens a tab, later calls only rewrite the feed.
 
 CLI:
   present.py show <file.md | ->  [--kind reply|question|plan] [--session=ID] [--open] [--no-open]
+  present.py show <board.json>   --kind threads [--session=ID]   (a loose-threads board; see threads.py)
   present.py turn                [--back N] [--session=ID] [--open] [--no-open]
   present.py theme [id]
   present.py on | off | status | last | prune
@@ -86,7 +87,10 @@ OPEN_HTML_RE = re.compile(
     r"(^|[;&|]\s*|\s)(open|xdg-open|start|Start-Process|Invoke-Item|ii)\s+[^;&|]*\.html?\b", re.I)
 
 LABELS = {"reply": "Reply", "question": "Waiting on you", "ask": "Waiting on you",
-          "plan": "Plan for approval"}
+          "plan": "Plan for approval", "threads": "Loose threads"}
+THREAD_PRIORITIES = ("high", "medium", "low")
+THREAD_EFFORTS = ("quick", "medium", "long")
+THREAD_FIELDS = ("title", "why", "next", "project", "source", "session")
 
 
 def log(**fields):
@@ -306,7 +310,35 @@ def build_id():
     return digest.hexdigest()[:10]
 
 
-def render(session_id, cwd, kind, markdown, options=None):
+def threads_board(board):
+    """A loose-threads board from Claude's JSON -> (markdown for the document view, cleaned board).
+    Raises ValueError naming what is wrong, so Claude can fix the file and retry."""
+    threads = board.get("threads") if isinstance(board, dict) else None
+    if not isinstance(threads, list):
+        raise ValueError('the board needs a "threads" list')
+    clean = []
+    for i, t in enumerate(threads, 1):
+        if not isinstance(t, dict) or not str(t.get("title") or "").strip():
+            raise ValueError(f"thread {i} needs a title")
+        c = {k: str(t.get(k) or "").strip() for k in THREAD_FIELDS}
+        c["priority"] = t.get("priority") if t.get("priority") in THREAD_PRIORITIES else "medium"
+        c["effort"] = t.get("effort") if t.get("effort") in THREAD_EFFORTS else "medium"
+        c["at"] = t.get("at") if isinstance(t.get("at"), int) else 0
+        clean.append(c)
+    title = str(board.get("title") or "Loose threads").strip()
+    summary = str(board.get("summary") or "").strip()
+    lines = [f"# {title}", ""] + ([summary, ""] if summary else [])
+    for c in sorted(clean, key=lambda c: THREAD_PRIORITIES.index(c["priority"])):
+        tags = " · ".join(x for x in (c["priority"], c["effort"], c["project"], c["source"]) if x)
+        lines += [f"## {c['title']}", "", f"*{tags}*", ""]
+        if c["why"]:
+            lines += [c["why"], ""]
+        if c["next"]:
+            lines += ["```", c["next"], "```", ""]
+    return "\n".join(lines), {"title": title, "summary": summary, "threads": clean}
+
+
+def render(session_id, cwd, kind, markdown, options=None, board=None):
     """Store the reply in its own file and point the session feed at it. Returns (page path, key)."""
     OUT.mkdir(parents=True, exist_ok=True)
     key = session_key(session_id)
@@ -319,7 +351,10 @@ def render(session_id, cwd, kind, markdown, options=None):
     item = {"n": n, "kind": kind, "label": LABELS.get(kind, kind),
             "time": f"{now:%a %b} {now.day}, {now:%H:%M}", "at": int(now.timestamp()),
             "title": reply_title(markdown), "words": len(markdown.split())}
-    write_script(entry_path(key, n), ENTRY_PREFIX, dict(item, markdown=markdown, options=options or []))
+    entry = dict(item, markdown=markdown, options=options or [])
+    if board:
+        entry["board"] = board
+    write_script(entry_path(key, n), ENTRY_PREFIX, entry)
 
     index = read_script(index_path(key), INDEX_PREFIX) or {}
     items = (index.get("items") or []) + [item]
@@ -372,12 +407,12 @@ def open_page(path, focus=True):
         return f"open failed: {exc}"
 
 
-def present(session_id, cwd, kind, markdown, options=None, reason="", event="cli", open_mode="auto"):
+def present(session_id, cwd, kind, markdown, options=None, reason="", event="cli", open_mode="auto", board=None):
     """open_mode: auto (open a tab once per session), always, never (store the reply only)."""
     if os.environ.get("PRESENT_DRY_RUN") == "1":
         log(event=event, decision="dry-run", kind=kind, reason=reason)
         return None, "dry-run"
-    path, key = render(session_id, cwd, kind, markdown, options)
+    path, key = render(session_id, cwd, kind, markdown, options, board)
     opened = opened_marker(key)
     if open_mode == "always" or (open_mode == "auto" and not opened.exists()):
         # A page someone asked for comes forward; a hook's mirror only does when Claude is waiting.
@@ -529,7 +564,14 @@ def cmd_show(args):
     if not markdown.strip():
         print("Nothing to present: the file is empty.")
         return 1
-    path, how = present(session_id, os.getcwd(), args.kind, markdown, None, "show", "cli", args.open_mode)
+    board = None
+    if args.kind == "threads":
+        try:
+            markdown, board = threads_board(json.loads(markdown))
+        except ValueError as exc:
+            print(f"Not a loose-threads board ({args.file}): {exc}")
+            return 1
+    path, how = present(session_id, os.getcwd(), args.kind, markdown, None, "show", "cli", args.open_mode, board)
     if path:
         shown_marker(session_id).touch()
     print(f"Presented ({how}): {path}")
@@ -620,7 +662,7 @@ def cli(argv):
 
     show = sub.add_parser("show")
     show.add_argument("file")
-    show.add_argument("--kind", choices=["reply", "question", "plan"], default="reply")
+    show.add_argument("--kind", choices=["reply", "question", "plan", "threads"], default="reply")
     page_args(show)
     turn = sub.add_parser("turn")
     turn.add_argument("--back", type=int, default=1)
