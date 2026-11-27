@@ -321,6 +321,8 @@
   var SORT_KEY = "present.threadSort";
   var SORTS = [["priority", "Priority"], ["effort", "Quick wins"], ["newest", "Newest"]];
   var RANK = { high: 0, medium: 1, low: 2, quick: 0, long: 2 };
+  // Effort reads differently from priority, so "medium" never shows up twice on one card.
+  var EFFORT_LABELS = { quick: "quick", medium: "one session", long: "multi-session" };
 
   function sortThreads(threads, by) {
     return threads.slice().sort(function (a, b) {
@@ -331,7 +333,7 @@
 
   function threadCard(t) {
     var card = el("div", "thread p-" + t.priority), tags = el("div", "ttags");
-    tags.append(el("span", "tag pri", t.priority), el("span", "tag", t.effort));
+    tags.append(el("span", "tag pri", t.priority), el("span", "tag", EFFORT_LABELS[t.effort] || t.effort));
     [t.project, t.source].filter(Boolean).forEach(function (x) { tags.appendChild(el("span", "tag", x)); });
     card.append(tags, el("div", "ttitle", t.title));
     if (t.why) card.appendChild(el("div", "twhy", t.why));
