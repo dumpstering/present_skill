@@ -41,6 +41,11 @@
     --banner-edge: 8px; --banner-radius: var(--radius); --banner-case: var(--ui-case); --banner-track: .06em; --banner-size: 14px; --banner-weight: 700;
     --bullet: var(--mark); --bullet-weight: 700; --quote-w: 4px; --edge-w: 4px; --pre-radius: var(--radius);
     --th-ink: var(--ink); --th-rule: 2px solid var(--ink); --th-font: var(--ui-font);
+    /* designed slides: card colors cycle d1..d6; the cover uses --hero */
+    --d1: var(--accent); --d2: var(--mark); --d3: var(--quote); --d4: var(--accent); --d5: var(--mark); --d6: var(--quote);
+    --deck-radius: calc(var(--radius) * 2); --deck-shadow: var(--card-shadow);
+    --hero: linear-gradient(135deg, var(--band) 0%, color-mix(in srgb, var(--accent) 55%, var(--band)) 100%);
+    --hero-ink: var(--band-ink); --bubble-ink: var(--band);
   }
   :root[data-theme="parks"] { color-scheme: light dark; }
   @media (prefers-color-scheme: dark) {
@@ -74,6 +79,9 @@
     --banner-edge: 0px; --banner-radius: 10px; --banner-case: none; --banner-track: 0; --banner-size: 15px; --banner-weight: 600;
     --bullet: var(--ink); --bullet-weight: 400; --quote-w: 3px; --edge-w: 0px; --pre-radius: 8px;
     --th-ink: var(--muted); --th-rule: 1px solid var(--rule); --th-font: var(--sans);
+    --d1: #2563eb; --d2: #0d9488; --d3: #7c3aed; --d4: #d97706; --d5: #e11d48; --d6: #16a34a;
+    --deck-radius: 16px; --deck-shadow: 0 1px 2px rgb(0 0 0 / .04), 0 10px 28px -14px rgb(0 0 0 / .22);
+    --hero: linear-gradient(135deg, #1e3a8a 0%, #4338ca 50%, #7c3aed 100%); --hero-ink: #fff; --bubble-ink: #3730a3;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme]), :root[data-theme="classic"] {
@@ -247,6 +255,14 @@
     text-transform: var(--pill-case); color: var(--pill-ink); background: var(--pill-bg); padding: var(--pill-pad); border-radius: var(--pill-radius); }
   .waiting .pill { color: var(--pill-wait); background: var(--pill-wait-bg); }
   header.top .spacer { flex: 1; }
+  /* One line on desktop: what differs between replies (meta text, view buttons) shrinks the meta text instead of
+     wrapping, so stepping through history never moves the toolbar. Narrow screens may still wrap. */
+  @media (min-width: 901px) {
+    header.top { flex-wrap: nowrap; }
+    header.top > * { flex: none; }
+    header.top > .spacer { flex: 1 1 0; }
+    header.top > #meta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  }
   kbd { font-family: var(--mono); font-size: 11px; text-transform: none; border: 1px solid var(--band-rule); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
   header.top button, header.top select, .copy, .slidebar button {
     font-family: var(--ui-font); font-size: 11px; font-weight: var(--ui-weight); text-transform: var(--ui-case); letter-spacing: var(--ui-track);
@@ -260,6 +276,11 @@
   button:disabled { opacity: .4; cursor: default; }
   button:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
   .count { font-variant-numeric: tabular-nums; }
+  /* Fixed width so stepping from "9 / 12" to "10 / 12" never reflows the toolbar. */
+  header.top .count { display: inline-block; min-width: 7ch; text-align: center; }
+  header.top button kbd { border-color: currentColor; opacity: .7; padding: 0 3px; }
+  .slidebar #keys { font-family: var(--ui-font); font-size: 11px; color: var(--muted); white-space: nowrap; }
+  @media (max-width: 900px) { .slidebar #keys { display: none; } }
 
   .banner {
     max-width: 880px; margin: 20px auto 0; padding: 12px 18px; border-left: var(--banner-edge) solid var(--mark); border-radius: var(--banner-radius);
@@ -345,12 +366,105 @@
   @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) { .slides article > section.on { animation: none; } .slidebar .bar i { transition: none; } }
 
+  /* ---------- view switcher, fit, full screen ---------- */
+  .views { display: inline-flex; }
+  header.top .views button { border-radius: 0; }
+  header.top .views button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  header.top .views button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+  header.top .views button + button { border-left-width: 0; }
+  header.top .views button.on, .slidebar button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .doc.slides.fit article { overflow: hidden; }
+  html:fullscreen header.top, html:fullscreen .banner { display: none !important; }
+  html:fullscreen .slidebar { opacity: .25; transition: opacity .2s; }
+  html:fullscreen .slidebar:hover { opacity: 1; }
+
+  /* ---------- designed slides: markdown structure mapped onto layouts ---------- */
+  .deck article { font-size: 1.18em; background:
+      radial-gradient(1100px 560px at 8% -12%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 62%),
+      radial-gradient(900px 520px at 108% 112%, color-mix(in srgb, var(--d3) 10%, transparent), transparent 62%); }
+  .deck article > section { width: min(1180px, 100%); }
+  .dhead { display: flex; align-items: center; gap: 18px; margin-bottom: 26px; }
+  .dhead .num { font: 700 14px var(--mono); color: var(--accent); background: var(--accent-soft); padding: 5px 11px; border-radius: 999px; flex: none; }
+  .deck .dhead h2 { font-size: calc(var(--h2-size) * 1.8); line-height: 1.15; margin: 0; padding: 0; border: 0; letter-spacing: -0.02em; }
+  .deck .dlead p, .deck p.dlead { font-size: 1.25em; line-height: 1.45; font-weight: 500; margin: 0 0 24px; max-width: 62ch; }
+  .deck .dpara { color: var(--muted); max-width: 70ch; margin: 0 0 16px; }
+  .deck .dsub { font-family: var(--ui-font); font-size: 14px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin: 26px 0 12px; border: 0; padding: 0; }
+  .cards { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); margin: 6px 0 22px; }
+  .cards.n1 { grid-template-columns: 1fr; }
+  .cards.n2, .cards.n4 { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 900px) { .cards { grid-template-columns: 1fr !important; } }
+  .card, .stat { --a: var(--accent); background: var(--panel); border: 1px solid var(--rule); border-radius: var(--deck-radius); box-shadow: var(--deck-shadow); }
+  .card { padding: 18px 20px 20px; border-top: 4px solid var(--a); font-size: 0.9em; line-height: 1.5; }
+  .card-h { font-family: var(--display); font-weight: 700; font-size: 1.05em; margin-bottom: 6px; }
+  .card-b { color: var(--muted); } .card-b.plain { color: var(--ink); }
+  .card-b p, .stat p { margin: 0; max-width: none; }
+  .card-b ul, .card-b ol { margin: 6px 0 0; padding-left: 20px; }
+  .cards > :nth-child(6n+1), .stats > :nth-child(6n+1), .steps > :nth-child(6n+1) { --a: var(--d1); }
+  .cards > :nth-child(6n+2), .stats > :nth-child(6n+2), .steps > :nth-child(6n+2) { --a: var(--d2); }
+  .cards > :nth-child(6n+3), .stats > :nth-child(6n+3), .steps > :nth-child(6n+3) { --a: var(--d3); }
+  .cards > :nth-child(6n+4), .stats > :nth-child(6n+4), .steps > :nth-child(6n+4) { --a: var(--d4); }
+  .cards > :nth-child(6n+5), .stats > :nth-child(6n+5), .steps > :nth-child(6n+5) { --a: var(--d5); }
+  .cards > :nth-child(6n+6), .stats > :nth-child(6n+6), .steps > :nth-child(6n+6) { --a: var(--d6); }
+  .stats { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin: 6px 0 22px; }
+  .stat { padding: 22px 22px 20px; }
+  .stat .v { font-family: var(--display); font-size: 54px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; color: var(--a); }
+  .stat .l { color: var(--muted); margin-top: 12px; font-size: 0.85em; line-height: 1.45; }
+  .deck ol.steps { list-style: none; padding: 0; margin: 6px 0 22px; display: grid; gap: 16px; }
+  .steps > li { --a: var(--accent); position: relative; display: grid; grid-template-columns: 44px 1fr; gap: 16px; max-width: none; }
+  .steps .dot { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--a); color: #fff; font-weight: 700; font-size: 17px; box-shadow: 0 6px 16px -6px var(--a); }
+  .steps > li:not(:last-child)::after { content: ""; position: absolute; left: 21px; top: 50px; bottom: -14px; width: 2px; background: var(--rule); }
+  .steps > li > div { padding-top: 8px; }
+  .steps .card-h { margin-bottom: 2px; }
+  .deck ul.chips { list-style: none; padding: 0; margin: 6px 0 22px; columns: 2; column-gap: 32px; }
+  .chips li { break-inside: avoid; position: relative; padding: 8px 0 8px 20px; border-bottom: 1px solid var(--rule); font-size: 0.9em; max-width: none; }
+  .chips li::before { content: ""; position: absolute; left: 0; top: 1.05em; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .chips li p { margin: 0; display: inline; }
+  .deck blockquote.quote { font-size: 1.25em; line-height: 1.42; font-weight: 500; color: var(--ink); padding: 20px 28px; margin: 8px 0 22px;
+    border-radius: var(--deck-radius); background: var(--accent-soft); border-left: 6px solid var(--accent); }
+  .quote p { margin: 0; max-width: none; }
+  .dtable table { display: table; width: 100%; background: var(--panel); border: 1px solid var(--rule); border-radius: var(--deck-radius); overflow: hidden; font-size: 0.85em; border-collapse: separate; border-spacing: 0; }
+  .dtable th { background: var(--accent-soft); color: var(--accent); padding: 10px 16px; }
+  .dtable td { padding: 10px 16px; }
+  .hero { padding: 56px 60px; border-radius: calc(var(--deck-radius) * 1.75); color: var(--hero-ink); background: var(--hero);
+    box-shadow: 0 30px 60px -30px color-mix(in srgb, var(--accent) 60%, transparent); }
+  .hero .kicker { font-family: var(--ui-font); text-transform: uppercase; letter-spacing: .12em; font-size: 13px; opacity: .78; }
+  .deck .hero h1 { font-size: 54px; line-height: 1.08; margin: 14px 0 20px; letter-spacing: -0.03em; color: inherit; }
+  .hero-lead { font-size: 1.05em; line-height: 1.5; opacity: .93; }
+  .hero-lead p { max-width: 62ch; margin: 0 0 12px; }
+  .hero a { color: inherit; }
+  .hero code { background: rgb(255 255 255 / .16); color: inherit; }
+  .bubbles { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
+  .bubble { display: inline-flex; align-items: center; gap: 10px; padding: 7px 18px 7px 7px; border-radius: 999px; font-size: 0.8em;
+    background: rgb(255 255 255 / .14); border: 1px solid rgb(255 255 255 / .26); }
+  .bubble b { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--hero-ink); color: var(--bubble-ink); font-size: 13px; flex: none; }
+  .deck section.dense { font-size: 0.86em; }
+  .deck section.dense .dlead p { font-size: 1.1em; }
+  .dbody > .optgroup { margin-top: 18px; }
+
   .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
     padding: 7px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 9; }
   .toast.on { opacity: .92; }
 
+  /* History drawer: every stored reply in this chat, newest first. */
+  header.top button#history.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); z-index: 8; display: flex; flex-direction: column;
+    background: var(--panel); color: var(--ink); border-left: 1px solid var(--rule); box-shadow: -12px 0 32px rgba(0,0,0,.18); }
+  .drawer[hidden] { display: none; }
+  .drawer .dtop { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--rule);
+    font-family: var(--ui-font); font-size: 13px; font-weight: 600; }
+  .drawer .dtop span { flex: 1; }
+  .drawer .dtop button { font: inherit; font-size: 11px; background: transparent; color: var(--muted); border: 1px solid var(--rule);
+    border-radius: var(--radius); padding: 3px 9px; cursor: pointer; }
+  .drawer ol { list-style: none; margin: 0; padding: 6px 0; overflow-y: auto; flex: 1; }
+  .drawer li { display: flex; flex-direction: column; gap: 3px; padding: 9px 16px; cursor: pointer; border-left: 3px solid transparent; }
+  .drawer li:hover, .drawer li:focus-visible { background: var(--accent-soft); outline: none; }
+  .drawer li.on { border-left-color: var(--accent); background: var(--accent-soft); }
+  .drawer .htitle { font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+  .drawer .hmeta { font-family: var(--ui-font); font-size: 11px; color: var(--muted); }
+
   @media print {
-    header.top, nav.outline, .copy, .slidebar { display: none !important; }
+    header.top, nav.outline, .copy, .slidebar, .drawer { display: none !important; }
     .slides article > section { display: block; }
   }
 </style>
@@ -360,12 +474,12 @@
   <span class="pill" id="pill">Loading</span>
   <span id="meta"></span>
   <span class="spacer"></span>
-  <span id="keys"></span>
   <select id="theme" aria-label="Page style" title="Page style"></select>
-  <button id="older" title="Earlier page in this session">Older</button>
+  <button id="older" title="Earlier reply in this chat ([ or Shift+Left)"><kbd>[</kbd> Older</button>
   <span class="count" id="count"></span>
-  <button id="newer" title="Later page in this session">Newer</button>
-  <button id="view" hidden>Slides</button>
+  <button id="newer" title="Later reply in this chat (] or Shift+Right; Esc jumps to the newest)">Newer <kbd>]</kbd></button>
+  <button id="history" title="Every reply in this chat (press h)">History</button>
+  <span class="views" id="views"></span>
   <button id="copy-all">Copy markdown</button>
 </header>
 <div class="banner" id="banner" hidden>Claude is waiting on you. Answer in the chat; this page is a mirror.</div>
@@ -377,8 +491,15 @@
     <button id="prev" aria-label="Previous slide">&larr;</button><span class="count" id="slidecount"></span>
     <div class="bar"><i id="prog"></i></div>
     <button id="next" aria-label="Next slide">&rarr;</button>
+    <span id="keys"></span>
+    <button id="fit" title="Press f">Fit to screen</button>
+    <button id="full" title="Press p">Full screen</button>
   </div>
 </main>
+<aside class="drawer" id="drawer" aria-label="Replies in this chat" hidden>
+  <div class="dtop"><span>Replies in this chat</span><button id="hclose" title="Press h or Esc">Close</button></div>
+  <ol id="hlist"></ol>
+</aside>
 <div class="toast" id="toast" role="status"></div>
 <script src="{{MARKED_SRC}}"></script>
 <script src="{{PAGE_SRC}}" data-feed="{{FEED}}" data-build="{{BUILD}}"></script>

@@ -1,10 +1,13 @@
 /* Renderer for present.py pages. Loaded from _assets/ beside the page; the CSP allows no inline script.
-   The page polls its feed file (out/<session>.data.js), which calls window.__present(data). */
+   The page polls its small feed file (out/<session>.data.js), which calls window.__present(data) with
+   the newest reply number; each reply lives in its own file and is fetched only when shown. */
 (function () {
   "use strict";
 
   var FEED = document.currentScript.getAttribute("data-feed");
   var BUILD = document.currentScript.getAttribute("data-build");
+  // <key>.data.js -> <key>: reply files are <key>.r000042.js, the title list <key>.index.js.
+  var SESSION = FEED.replace(/\.data\.js$/, "");
   var POLL_MS = 1500;
   var SLIDE_MIN_SECTIONS = 3;
   var SLIDE_MAX_WORDS = 220;
@@ -17,6 +20,12 @@
   var META_SEP = "  \u00b7  ";
   var SAFE_HREF = /^(https?:|mailto:|#)/i;
   var DROP_TAGS = /^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|LINK|META|BASE|FORM|INPUT|BUTTON|TEXTAREA|SELECT)$/;
+  // View id, button label, key. Slide-shaped pages open in whichever slide style was picked last.
+  var VIEWS = [["doc", "Document", "d"], ["slides", "Text slides", "s"], ["designed", "Designed slides", "v"]];
+  var STYLE_KEY = "present.slideStyle", FIT_KEY = "present.fit";
+  // A bold lead that is just a number ("**12**", "**~40%**", "**3.2x**") makes the list a row of stat tiles.
+  var STAT_RE = /^[~\u2248<>$+-]?\s*\d[\d.,]*\s*(%|[kKMB]|x|ms|s|m|h|d|wk|mo|yr|lb|kg|bpm|TB|GB|MB|KB|kB)?\+?$/;
+  var DENSE_WORDS = 130;
 
   // Looks defined in template.html; the first is the default.
   var THEMES = [
@@ -35,9 +44,16 @@
     ["portfolio-showcase", "Portfolio Showcase"]
   ];
 
-  var state = { rev: null, data: null, index: 0, slides: false, canToggle: false, splitTag: "H2", slide: 0,
-    unread: false, themeRev: null };
+  var state = { rev: null, data: null, entry: null, cache: {}, want: null, indexRev: null, mode: "doc", canToggle: false, splitTag: "H2", slide: 0,
+    unread: false, themeRev: null, fit: storeGet(FIT_KEY) !== "0" };
   var $ = function (id) { return document.getElementById(id); };
+
+  function storeGet(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function storeSet(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) { /* storage blocked */ }
+  }
 
   function esc(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -222,6 +238,7 @@
     $("prev").disabled = state.slide === 0;
     $("next").disabled = state.slide === sections.length - 1;
     $("article").scrollTop = 0;
+    fit();
   }
 
   // An opening section with no heading becomes the lead slide, with the headings as an agenda.
@@ -239,29 +256,246 @@
   function setKeys(on) {
     var keys = $("keys");
     keys.replaceChildren();
+    if (!state.canToggle) return;
     if (on) {
-      keys.append(el("kbd", "", "\u2190"), " ", el("kbd", "", "\u2192"), " navigate \u00a0 ", el("kbd", "", "d"), " document view");
-    } else if (state.canToggle) {
-      keys.append(el("kbd", "", "s"), " slides");
+      keys.append(el("kbd", "", "\u2190"), " ", el("kbd", "", "\u2192"), " navigate \u00a0 ",
+        el("kbd", "", "f"), " fit \u00a0 ", el("kbd", "", "p"), " full screen \u00a0 ");
     }
+    keys.append(el("kbd", "", "d"), " ", el("kbd", "", "s"), " ", el("kbd", "", "v"), " views");
+  }
+
+  function buildViews() {
+    var box = $("views");
+    box.replaceChildren();
+    // Always shown so the toolbar keeps one shape; slide views are disabled for replies with under two sections.
+    box.hidden = false;
+    VIEWS.forEach(function (v) {
+      var b = el("button", v[0] === state.mode ? "on" : "", v[1]);
+      b.type = "button";
+      b.disabled = !state.canToggle && v[0] !== "doc";
+      b.title = b.disabled ? "This reply has no sections to make slides from" : "Press " + v[2];
+      b.addEventListener("click", function () { setView(v[0]); });
+      box.appendChild(b);
+    });
   }
 
   function applyView() {
-    var on = state.canToggle && state.slides;
-    $("view").hidden = !state.canToggle;
-    $("view").textContent = on ? "Document" : "Slides";
+    if (!state.canToggle) state.mode = "doc";
+    var on = state.mode !== "doc";
     document.body.classList.toggle("slides-on", on);
     $("doc").classList.toggle("slides", on);
+    $("doc").classList.toggle("deck", state.mode === "designed");
     $("slidebar").hidden = !on;
+    buildViews();
     setKeys(on);
-    if (on) { addAgenda(); showSlide(); }
+    if (state.mode === "designed") designDeck();
+    else if (on) addAgenda();
+    if (on) showSlide(); else fit();
+  }
+
+  function preferredSlideMode() {
+    return storeGet(STYLE_KEY) === "slides" ? "slides" : "designed";
   }
 
   // A manual switch holds for the page being viewed; the next page picks its own view again.
-  function setView(slides) {
-    if (!state.data || !state.canToggle || state.slides === slides) return;
-    state.slides = slides;
+  function setView(mode) {
+    if (!state.data || !state.canToggle || state.mode === mode) return;
+    if (mode !== "doc") storeSet(STYLE_KEY, mode);
+    state.mode = mode;
     draw(true);
+  }
+
+  // ---------- designed slides: map markdown structure onto visual layouts ----------
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+
+  function firstReal(node) {
+    var c = node.firstChild;
+    while (c && c.nodeType === 3 && !c.textContent.trim()) c = c.nextSibling;
+    return c;
+  }
+
+  // "- **Lead** rest" -> { lead, rest }: lead is the <strong>, rest a fragment with everything after it.
+  // null when the item does not open with bold text.
+  function boldLead(li) {
+    var holder = li.firstElementChild && li.firstElementChild.tagName === "P" && firstReal(li) === li.firstElementChild
+      ? li.firstElementChild : li;
+    var strong = firstReal(holder);
+    if (!strong || strong.nodeType !== 1 || strong.tagName !== "STRONG") return null;
+    var rest = document.createDocumentFragment();
+    var node = strong.nextSibling;
+    while (node) { var next = node.nextSibling; rest.appendChild(node); node = next; }
+    if (holder !== li) {
+      node = holder.nextSibling;
+      while (node) { var after = node.nextSibling; rest.appendChild(node); node = after; }
+    }
+    // "**Lead**: under X" reads as "Under X" once it sits on its own line.
+    var head = rest.firstChild;
+    if (head && head.nodeType === 3) {
+      head.textContent = head.textContent.replace(/^\s*[:\-\u2013\u2014.]?\s*/, "").replace(/^[a-z]/, function (c) { return c.toUpperCase(); });
+    }
+    return { lead: strong, rest: rest };
+  }
+
+  function cardInner(li, lead) {
+    var frag = document.createDocumentFragment();
+    if (lead) {
+      var h = el("div", "card-h");
+      h.append.apply(h, Array.prototype.slice.call(lead.lead.childNodes));
+      frag.appendChild(h);
+      if (lead.rest.textContent.trim() || lead.rest.querySelector && lead.rest.querySelector("*")) {
+        var b = el("div", "card-b");
+        b.appendChild(lead.rest);
+        frag.appendChild(b);
+      }
+    } else {
+      var plain = el("div", "card-b plain");
+      plain.append.apply(plain, Array.prototype.slice.call(li.childNodes));
+      frag.appendChild(plain);
+    }
+    return frag;
+  }
+
+  function designList(list) {
+    var items = Array.prototype.slice.call(list.children).filter(function (n) { return n.tagName === "LI"; });
+    var leadText = items.map(function (li) {
+      var holder = li.firstElementChild && li.firstElementChild.tagName === "P" ? li.firstElementChild : li;
+      var s = firstReal(holder);
+      return s && s.nodeType === 1 && s.tagName === "STRONG" ? s.textContent.trim() : null;
+    });
+    var leads = items.map(boldLead);
+    var out;
+    if (items.length >= 2 && items.length <= 6 && leadText.every(function (t) { return t !== null && STAT_RE.test(t); })) {
+      out = el("div", "stats");
+      items.forEach(function (li, i) {
+        var tile = el("div", "stat"), v = el("div", "v"), l = el("div", "l");
+        v.append.apply(v, Array.prototype.slice.call(leads[i].lead.childNodes));
+        l.appendChild(leads[i].rest);
+        tile.append(v, l);
+        out.appendChild(tile);
+      });
+    } else if (list.tagName === "OL") {
+      out = el("ol", "steps");
+      var start = Number(list.getAttribute("start")) || 1;
+      items.forEach(function (li, i) {
+        var row = el("li"), body = el("div");
+        body.appendChild(cardInner(li, leads[i]));
+        row.append(el("span", "dot", String(start + i)), body);
+        out.appendChild(row);
+      });
+    } else if (items.length <= 6) {
+      out = el("div", "cards n" + items.length);
+      items.forEach(function (li, i) {
+        var card = el("div", "card");
+        card.appendChild(cardInner(li, leads[i]));
+        out.appendChild(card);
+      });
+    } else {
+      out = el("ul", "chips");
+      items.forEach(function (li, i) {
+        var chip = el("li");
+        if (leads[i]) {
+          var b = el("b");
+          b.append.apply(b, Array.prototype.slice.call(leads[i].lead.childNodes));
+          chip.append(b, " ", leads[i].rest);
+        } else {
+          chip.append.apply(chip, Array.prototype.slice.call(li.childNodes));
+        }
+        out.appendChild(chip);
+      });
+    }
+    return out;
+  }
+
+  function designSection(section, num) {
+    var dense = wordCount(section) > DENSE_WORDS;
+    var kids = Array.prototype.slice.call(section.children);
+    var heading = kids.shift();
+    var head = el("div", "dhead");
+    head.append(el("span", "num", pad2(num)), heading);
+    var body = el("div", "dbody");
+    var leadDone = false;
+    kids.forEach(function (node) {
+      var tag = node.tagName;
+      if (tag === "HR") return;
+      if (/^H[1-6]$/.test(tag)) { node.className = "dsub"; body.appendChild(node); return; }
+      if (tag === "P") { node.className = leadDone ? "dpara" : "dlead"; leadDone = true; body.appendChild(node); return; }
+      if (tag === "UL" || tag === "OL") { body.appendChild(designList(node)); return; }
+      if (tag === "BLOCKQUOTE") { node.className = "quote"; body.appendChild(node); return; }
+      if (tag === "TABLE") { var wrap = el("div", "dtable"); wrap.appendChild(node); body.appendChild(wrap); return; }
+      body.appendChild(node);
+    });
+    section.classList.add("dslide");
+    section.classList.toggle("dense", dense);
+    section.replaceChildren(head, body);
+  }
+
+  // Cover slide: kicker, title, any opening paragraph, and the section titles as numbered bubbles.
+  function coverSection(sections) {
+    var d = state.data, entry = state.entry;
+    var headed = sections.filter(isHeaded);
+    var opener = sections.length && !isHeaded(sections[0]) ? sections[0] : null;
+    var h1 = opener && opener.querySelector(":scope > h1");
+    var title = h1 ? h1.textContent : (d.project || entry.label || "");
+    if (h1) h1.remove();
+    var hero = el("div", "hero");
+    hero.appendChild(el("div", "kicker", [entry.label, d.project, entry.time].filter(Boolean).join(META_SEP)));
+    hero.appendChild(el("h1", "", title));
+    if (opener && opener.textContent.trim()) {
+      var lead = el("div", "hero-lead");
+      lead.append.apply(lead, Array.prototype.slice.call(opener.childNodes));
+      hero.appendChild(lead);
+    }
+    var bubbles = el("div", "bubbles");
+    headed.forEach(function (s, i) {
+      var bubble = el("span", "bubble");
+      bubble.append(el("b", "", String(i + 1)), s.firstElementChild.textContent);
+      bubbles.appendChild(bubble);
+    });
+    hero.appendChild(bubbles);
+    var cover = opener || el("section");
+    cover.replaceChildren(hero);
+    cover.classList.add("cover");
+    return cover;
+  }
+
+  function designDeck() {
+    var article = $("article");
+    var sections = Array.prototype.slice.call(slideSections());
+    var cover = coverSection(sections);
+    if (cover.parentNode !== article) article.insertBefore(cover, article.firstChild);
+    var num = 0;
+    sections.forEach(function (s) { if (s !== cover && isHeaded(s)) designSection(s, ++num); });
+  }
+
+  // Zoom the current slide so it fills the stage. Width is pinned to its natural size first so the
+  // zoom scales the layout as it is instead of reflowing it wider.
+  function fit() {
+    var doc = $("doc"), on = doc.classList.contains("slides");
+    doc.classList.toggle("fit", on && state.fit);
+    $("fit").classList.toggle("on", state.fit);
+    var sections = slideSections();
+    for (var i = 0; i < sections.length; i++) { sections[i].style.zoom = ""; sections[i].style.width = ""; }
+    if (!on || !state.fit) return;
+    var stage = $("article"), slide = sections[state.slide];
+    if (!slide) return;
+    var cs = getComputedStyle(stage);
+    var availW = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    var availH = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    var w = slide.offsetWidth, h = slide.offsetHeight;
+    if (!w || !h) return;
+    slide.style.width = w + "px";
+    slide.style.zoom = Math.max(0.35, Math.min(availW / w, availH / h, 2.2));
+  }
+
+  function toggleFit() {
+    state.fit = !state.fit;
+    storeSet(FIT_KEY, state.fit ? "1" : "0");
+    fit();
+  }
+
+  function toggleFull() {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(function () { toast("Full screen was blocked."); });
   }
 
   // The last section holds the question; in slides that is the last slide.
@@ -305,21 +539,22 @@
   }
 
   function setTitle() {
-    var d = state.data, entry = d.entries[state.index];
+    var d = state.data, entry = state.entry;
     document.title = (state.unread ? "(new) " : "") + [entry.label, d.project, d.branch].filter(Boolean).join(" \u00b7 ");
   }
 
   // keepView: redraw the same page after a manual Slides / Document switch.
   function draw(keepView) {
-    var d = state.data, entry = d.entries[state.index];
-    var waiting = !!WAITING[entry.kind] && state.index === d.entries.length - 1;
+    var d = state.data, entry = state.entry;
+    var waiting = !!WAITING[entry.kind] && entry.n === d.latest;
 
     document.body.classList.toggle("waiting", waiting);
     $("pill").textContent = entry.label;
     $("meta").textContent = [d.project, d.branch, entry.time].filter(Boolean).join(META_SEP);
-    $("count").textContent = (state.index + 1) + " / " + d.entries.length;
-    $("older").disabled = state.index === 0;
-    $("newer").disabled = state.index === d.entries.length - 1;
+    $("count").textContent = (entry.n - d.first + 1) + " / " + (d.latest - d.first + 1);
+    $("older").disabled = entry.n <= d.first;
+    $("newer").disabled = entry.n >= d.latest;
+    markCurrent();
 
     var article = $("article");
     article.replaceChildren(renderMarkdown(entry.markdown || ""));
@@ -337,7 +572,7 @@
     state.canToggle = sections.length >= 2;
     if (!keepView) {
       // Three or more short sections open as slides; everything else as a document.
-      state.slides = slideEligible(sections);
+      state.mode = slideEligible(sections) ? preferredSlideMode() : "doc";
       state.slide = 0;
     }
     buildOptions(entry.options, sections);
@@ -348,11 +583,69 @@
     window.scrollTo(0, 0);
   }
 
+  // ---------- history: one file per reply, fetched only when you go to it ----------
+  function loadScript(src, onError) {
+    var s = document.createElement("script");
+    s.src = src;
+    s.onload = function () { s.remove(); };
+    s.onerror = function () { s.remove(); if (onError) onError(); };
+    document.head.appendChild(s);
+  }
+
+  function showReply(n) {
+    var d = state.data;
+    if (!d || n < d.first || n > d.latest) return;
+    if (state.cache[n]) {
+      state.want = null;
+      state.entry = state.cache[n];
+      draw();
+      return;
+    }
+    state.want = n;
+    loadScript(SESSION + ".r" + ("00000" + n).slice(-6) + ".js", function () {
+      if (state.want === n) toast("That reply is no longer stored.");
+    });
+  }
+
+  window.__presentEntry = function (entry) {
+    if (!entry || typeof entry.n !== "number") return;
+    state.cache[entry.n] = entry;
+    if (entry.n === state.want) showReply(entry.n);
+  };
+
   function go(delta) {
-    var next = state.index + delta;
-    if (!state.data || next < 0 || next >= state.data.entries.length) return;
-    state.index = next;
-    draw();
+    if (state.entry) showReply(state.entry.n + delta);
+  }
+
+  function markCurrent() {
+    var items = $("hlist").children;
+    for (var i = 0; i < items.length; i++) items[i].classList.toggle("on", +items[i].dataset.n === (state.entry && state.entry.n));
+  }
+
+  window.__presentIndex = function (index) {
+    var list = $("hlist");
+    list.replaceChildren();
+    ((index && index.items) || []).slice().reverse().forEach(function (item) {
+      var li = el("li");
+      li.dataset.n = item.n;
+      li.tabIndex = 0;
+      li.appendChild(el("span", "htitle", item.title || item.label));
+      li.appendChild(el("span", "hmeta", [item.label, item.time, item.words + " words"].join(META_SEP)));
+      li.addEventListener("click", function () { showReply(item.n); });
+      li.addEventListener("keydown", function (ev) { if (ev.key === "Enter") showReply(item.n); });
+      list.appendChild(li);
+    });
+    state.indexRev = state.rev;
+    markCurrent();
+  };
+
+  // The title list is only fetched when the drawer opens, and again only after a new reply.
+  function toggleHistory(open) {
+    var drawer = $("drawer");
+    open = typeof open === "boolean" ? open : drawer.hidden;
+    drawer.hidden = !open;
+    $("history").classList.toggle("on", open);
+    if (open && state.indexRev !== state.rev) loadScript(SESSION + ".index.js?t=" + Date.now());
   }
 
   function step(delta) {
@@ -372,16 +665,19 @@
   }
 
   // Called by the feed file each time it is (re)loaded.
+  // A new reply always takes over the view, even while you are reading an older one.
   window.__present = function (data) {
-    if (!data || !data.entries || !data.entries.length || data.rev === state.rev) return;
+    if (!data || !data.latest || data.rev === state.rev) return;
     if (staleBuild(data.build)) return;
     feedTheme(data);
     var first = state.rev === null;
+    var bumped = !state.data || data.latest !== state.data.latest;
     state.rev = data.rev;
     state.data = data;
-    state.index = data.entries.length - 1;
+    if (!bumped) return;
     state.unread = !first && document.hidden;
-    draw();
+    showReply(data.latest);
+    if (!$("drawer").hidden) toggleHistory(true);
   };
 
   function poll() {
@@ -429,20 +725,34 @@
 
   $("older").addEventListener("click", function () { go(-1); });
   $("newer").addEventListener("click", function () { go(1); });
+  $("history").addEventListener("click", function () { toggleHistory(); });
+  $("hclose").addEventListener("click", function () { toggleHistory(false); });
   $("prev").addEventListener("click", function () { step(-1); });
   $("next").addEventListener("click", function () { step(1); });
   $("copy-all").addEventListener("click", function () {
-    if (state.data) copyText(state.data.entries[state.index].markdown || "");
+    if (state.entry) copyText(state.entry.markdown || "");
   });
-  $("view").addEventListener("click", function () { setView(!state.slides); });
+  $("fit").addEventListener("click", toggleFit);
+  $("full").addEventListener("click", toggleFull);
+  window.addEventListener("resize", fit);
+  document.addEventListener("fullscreenchange", function () { requestAnimationFrame(fit); });
   document.addEventListener("keydown", function (ev) {
     if (ev.ctrlKey || ev.metaKey || ev.altKey || /^(SELECT|INPUT|TEXTAREA)$/.test(ev.target.tagName)) return;
     var key = ev.key.toLowerCase();
     if (ev.target.tagName === "BUTTON" && (key === " " || key === "enter")) return;  // the button's own action
     var inSlides = $("doc").classList.contains("slides");
-    if (key === "s" && !inSlides) return setView(true);
-    if (key === "d" && inSlides) return setView(false);
+    // History works in every view: [ ] (or Shift+arrows) step through earlier replies, H lists them, Esc returns.
+    if (key === "[" || (ev.shiftKey && key === "arrowleft")) { ev.preventDefault(); return go(-1); }
+    if (key === "]" || (ev.shiftKey && key === "arrowright")) { ev.preventDefault(); return go(1); }
+    if (key === "h") return toggleHistory();
+    if (key === "escape") {
+      if (!$("drawer").hidden) return toggleHistory(false);
+      if (state.data && !document.fullscreenElement) return showReply(state.data.latest);
+    }
+    for (var v = 0; v < VIEWS.length; v++) if (key === VIEWS[v][2]) return setView(VIEWS[v][0]);
     if (!inSlides) return;
+    if (key === "f") return toggleFit();
+    if (key === "p") return toggleFull();
     var last = slideSections().length - 1;
     if (key === "arrowright" || key === "pagedown" || key === " " || key === "j") { step(1); ev.preventDefault(); }
     if (key === "arrowleft" || key === "pageup" || key === "k") { step(-1); ev.preventDefault(); }

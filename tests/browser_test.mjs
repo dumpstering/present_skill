@@ -7,7 +7,7 @@
 // pick up a new entry without a reload, switch style from the dropdown and from "present.py theme",
 // and reload itself when the build id changes. Exit code 1 on any failure.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -38,6 +38,27 @@ print("hi")
 ## Three
 
 Short closing section.
+`;
+
+const DECK = `Deck layouts, one of each.
+
+## Numbers
+
+- **12** open issues
+- **3.4x** faster
+
+## Steps
+
+1. Fetch
+2. Build
+3. Ship
+
+## Cards
+
+- **Fast** - opens in under a second
+- **Local** - nothing leaves the machine
+
+> One callout to close.
 `;
 
 const ASK = JSON.stringify({
@@ -82,10 +103,11 @@ for (const [name, engine] of Object.entries(engines)) {
 
     check("default style is classic", (await page.evaluate(() => document.documentElement.dataset.theme)) === "classic");
 
-    // Three short sections: the page opens as slides by itself.
+    // Three short sections: the page opens as designed slides by itself, with a cover and agenda bubbles.
     const inSlides = () => page.evaluate(() => document.getElementById("doc").classList.contains("slides"));
-    const autoSlides = await inSlides();
-    const agenda = await page.locator("#article section.lead .agenda li").count();
+    const inDeck = () => page.evaluate(() => document.getElementById("doc").classList.contains("deck"));
+    const autoDeck = (await inSlides()) && (await inDeck());
+    const bubbles = await page.locator("#article section.cover .bubbles .bubble").count();
     await page.keyboard.press("ArrowRight");
     const second = await page.locator("#slidecount").innerText();
     await page.keyboard.press("End");
@@ -93,10 +115,25 @@ for (const [name, engine] of Object.entries(engines)) {
     await page.keyboard.press("d");
     const docView = !(await inSlides());
     await page.keyboard.press("s");
-    const backToSlides = await inSlides();
+    const textSlides = (await inSlides()) && !(await inDeck());
+    const agenda = await page.locator("#article section.lead .agenda li").count();
+    await page.keyboard.press("v");
+    const backToDeck = await inDeck();
     await page.keyboard.press("d");
-    check("slides: automatic, keys, agenda, progress", autoSlides && agenda === 3 && second === "2 / 4" && lastSlide === "4 / 4" && docView && backToSlides,
-      JSON.stringify({ autoSlides, agenda, second, lastSlide, docView, backToSlides }));
+    check("slides: designed by default, keys, cover, text-slide agenda, progress",
+      autoDeck && bubbles === 3 && second === "2 / 4" && lastSlide === "4 / 4" && docView && textSlides && agenda === 3 && backToDeck,
+      JSON.stringify({ autoDeck, bubbles, second, lastSlide, docView, textSlides, agenda, backToDeck }));
+
+    // Markdown structure maps onto designed layouts: bold numbers, numbered lists, bold-led bullets.
+    present(out, settings, ["show", "-", "--session=browsertest", "--no-open"], DECK);
+    await page.waitForFunction(() => document.getElementById("article").textContent.includes("Deck layouts"), null, { timeout: 8000 }).catch(() => {});
+    const layouts = await page.evaluate(() => ({
+      stats: document.querySelectorAll("#article .stat").length,
+      steps: document.querySelectorAll("#article ol.steps li").length,
+      cards: document.querySelectorAll("#article .card").length,
+      quote: document.querySelectorAll("#article blockquote.quote").length,
+    }));
+    check("designed layouts: stats, steps, cards, callout", layouts.stats === 2 && layouts.steps === 3 && layouts.cards === 2 && layouts.quote === 1, JSON.stringify(layouts));
 
     await page.locator("#article pre .copy").first().click({ force: true }).catch(() => {});
     results.push(["copy shows a toast", (await page.locator("#toast.on").count()) === 1 ? true : null, "clipboard blocked in this harness"]);
@@ -105,7 +142,8 @@ for (const [name, engine] of Object.entries(engines)) {
     present(out, settings, ["show", "-", "--session=browsertest", "--no-open"], "Second entry, pushed while the page was open.\n");
     const live = await page.waitForFunction(() => document.getElementById("article").textContent.includes("Second entry"), null, { timeout: 8000 }).then(() => true, () => false);
     check("live update without reload", live && (await page.evaluate(() => window.__sameDocument === true)), await page.locator("#count").innerText());
-    check("a short reply opens as a document", !(await inSlides()));
+    check("a short reply opens as a document, view buttons stay with slides disabled", !(await inSlides())
+      && (await page.locator("#views button").count()) === 3 && (await page.locator("#views button:disabled").count()) === 2);
 
     await page.selectOption("#theme", "brutalist-raw");
     check("dropdown switches style", (await page.evaluate(() => getComputedStyle(document.body).backgroundColor)) === "rgb(255, 255, 255)");
@@ -125,6 +163,35 @@ for (const [name, engine] of Object.entries(engines)) {
       && (await page.locator("#options .opt").count()) === 0, await page.locator("#banner").innerText().catch(() => ""));
     present(out, settings, ["show", "-", "--session=browsertest", "--no-open"], "Second entry again, so later checks have plain text.\n");
     await page.waitForFunction(() => document.getElementById("article").textContent.includes("Second entry again"), null, { timeout: 8000 }).catch(() => {});
+
+    // History: one file per reply, a small polled feed, [ / ] and the H drawer, and a new reply takes over the view.
+    const replyFiles = readdirSync(out).filter((f) => /^browsert\.r\d{6}\.js$/.test(f)).length;
+    const feedBytes = statSync(join(out, "browsert.data.js")).size;
+    check("one file per reply, small feed", replyFiles === 5 && feedBytes < 1000, JSON.stringify({ replyFiles, feedBytes }));
+    const barBefore = await page.evaluate(() => document.querySelector("header.top").offsetHeight);
+    await page.keyboard.press("[");
+    const back = await page.waitForFunction(() => document.querySelectorAll("#article section .opt").length === 4, null, { timeout: 8000 }).then(() => true, () => false);
+    const backCount = await page.locator("#count").innerText();
+    const barSteady = (await page.evaluate(() => document.querySelector("header.top").offsetHeight)) === barBefore;
+    await page.keyboard.press("Shift+ArrowRight");
+    const shiftNewer = await page.waitForFunction(() => document.getElementById("count").innerText === "5 / 5", null, { timeout: 8000 }).then(() => true, () => false);
+    await page.keyboard.press("Shift+ArrowLeft");
+    await page.keyboard.press("h");
+    const listed = await page.waitForFunction(() => document.querySelectorAll("#hlist li").length === 5, null, { timeout: 8000 }).then(() => true, () => false);
+    await page.locator("#hlist li").last().click();
+    const oldest = await page.waitForFunction(() => document.getElementById("article").textContent.includes("Bottom line"), null, { timeout: 8000 }).then(() => true, () => false);
+    const oldestCount = await page.locator("#count").innerText();
+    check("history: [ and Shift+arrows step, toolbar stays put, drawer lists every reply, click opens one",
+      back && backCount === "4 / 5" && barSteady && shiftNewer && listed && oldest && oldestCount === "1 / 5",
+      JSON.stringify({ back, backCount, barSteady, shiftNewer, listed, oldest, oldestCount }));
+    present(out, settings, ["show", "-", "--session=browsertest", "--no-open"], "Second entry, third time: a new reply takes over the view.\n");
+    const bumped = await page.waitForFunction(() => document.getElementById("article").textContent.includes("third time"), null, { timeout: 8000 }).then(() => true, () => false);
+    const relisted = await page.waitForFunction(() => document.querySelectorAll("#hlist li").length === 6, null, { timeout: 8000 }).then(() => true, () => false);
+    const bumpedCount = await page.locator("#count").innerText();
+    await page.keyboard.press("Escape");
+    const closed = !(await page.locator("#drawer").isVisible());
+    check("history: a new reply bumps the view and the list; Esc closes", bumped && relisted && bumpedCount === "6 / 6" && closed,
+      JSON.stringify({ bumped, relisted, bumpedCount, closed }));
 
     // A new build id in the feed must make the page reload itself once.
     await page.evaluate(() => { window.__sameDocument = true; });

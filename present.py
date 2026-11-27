@@ -66,10 +66,18 @@ MIN_WORDS = int(os.environ.get("PRESENT_MIN_WORDS", "200"))
 TABLE_MIN_WORDS = 80
 QUESTION_MIN_WORDS = 60
 RETENTION_DAYS = 14
-MAX_ENTRIES = 25      # per session page; older entries drop off the feed
+MAX_HISTORY = 500     # replies kept per session; older reply files are deleted
+TITLE_CHARS = 90
 SHOWN_MAX_AGE = 1800  # seconds; a marker older than this belongs to an earlier turn
+TAIL_START = 256 * 1024  # hook mode reads the transcript from the end, growing x8 until a prompt shows up
 
+# Three kinds of script file per session, each calling one page function:
+#   <key>.data.js         small pointer the page polls (newest reply number, theme, build)
+#   <key>.r000042.js      one reply, written once and never changed
+#   <key>.index.js        titles of every stored reply, loaded only when the history list opens
 FEED_PREFIX = "window.__present && window.__present("
+ENTRY_PREFIX = "window.__presentEntry && window.__presentEntry("
+INDEX_PREFIX = "window.__presentIndex && window.__presentIndex("
 FEED_SUFFIX = ");\n"
 
 TABLE_RE = re.compile(r"(?m)^\s*\|.*\|\s*$\n^\s*\|?\s*:?-{3,}")
@@ -117,28 +125,49 @@ def _is_prompt(entry, content):
     return "text" in types and "tool_result" not in types
 
 
-def read_turns(path):
+def parse_turns(lines):
     """Every turn's assistant text, oldest first: [[text, text, ...], ...]."""
     turns = []
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            try:
-                entry = json.loads(line)
-            except ValueError:
-                continue
-            if not isinstance(entry, dict) or entry.get("isSidechain"):
-                continue
-            content = (entry.get("message") or {}).get("content")
-            if entry.get("type") == "user" and _is_prompt(entry, content):
-                turns.append([])
-            elif entry.get("type") == "assistant" and turns and isinstance(content, list):
-                for block in content:
-                    if not isinstance(block, dict) or block.get("type") != "text":
-                        continue
-                    text = (block.get("text") or "").strip()
-                    if text and (not turns[-1] or turns[-1][-1] != text):
-                        turns[-1].append(text)
+    for line in lines:
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(entry, dict) or entry.get("isSidechain"):
+            continue
+        content = (entry.get("message") or {}).get("content")
+        if entry.get("type") == "user" and _is_prompt(entry, content):
+            turns.append([])
+        elif entry.get("type") == "assistant" and turns and isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict) or block.get("type") != "text":
+                    continue
+                text = (block.get("text") or "").strip()
+                if text and (not turns[-1] or turns[-1][-1] != text):
+                    turns[-1].append(text)
     return turns
+
+
+def read_turns(path):
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        return parse_turns(fh)
+
+
+def read_last_turn(path):
+    """The newest turn's text without parsing a long transcript from the top."""
+    size = os.path.getsize(path)
+    window = TAIL_START
+    while True:
+        start = max(0, size - window)
+        with open(path, "rb") as fh:
+            fh.seek(start)
+            lines = fh.read().decode("utf-8", errors="replace").split("\n")
+        if start:
+            lines = lines[1:]  # the first line was cut in half by the seek
+        turns = parse_turns(lines)
+        if turns or not start:
+            return turns[-1] if turns else []
+        window *= 8
 
 
 # ---------------------------------------------------------------- triggers
@@ -197,17 +226,45 @@ def page_path(key):
     return OUT / f"{key}.html"
 
 
-def read_feed(key):
+def entry_path(key, n):
+    return OUT / f"{key}.r{n:06d}.js"
+
+
+def index_path(key):
+    return OUT / f"{key}.index.js"
+
+
+def opened_marker(key):
+    return OUT / f"{key}.opened"
+
+
+def read_script(path, prefix):
     try:
-        raw = feed_path(key).read_text(encoding="utf-8")
+        raw = path.read_text(encoding="utf-8")
     except OSError:
         return None
-    if not (raw.startswith(FEED_PREFIX) and raw.endswith(FEED_SUFFIX)):
+    if not (raw.startswith(prefix) and raw.endswith(FEED_SUFFIX)):
         return None
     try:
-        return json.loads(raw[len(FEED_PREFIX):-len(FEED_SUFFIX)])
+        return json.loads(raw[len(prefix):-len(FEED_SUFFIX)])
     except ValueError:
         return None
+
+
+def write_script(path, prefix, obj):
+    write_atomic(path, prefix + safe_json(obj) + FEED_SUFFIX)
+
+
+def read_feed(key):
+    return read_script(feed_path(key), FEED_PREFIX)
+
+
+def reply_title(markdown):
+    for line in markdown.splitlines():
+        line = re.sub(r"^[\s#>*_`|-]+|[*_`]+", "", line).strip()
+        if line:
+            return line if len(line) <= TITLE_CHARS else line[:TITLE_CHARS - 1].rstrip() + "…"
+    return ""
 
 
 def write_atomic(path, text):
@@ -250,30 +307,36 @@ def build_id():
 
 
 def render(session_id, cwd, kind, markdown, options=None):
-    """Append an entry to the session feed. Returns (page path, True if the page is new)."""
+    """Store the reply in its own file and point the session feed at it. Returns (page path, key)."""
     OUT.mkdir(parents=True, exist_ok=True)
     key = session_key(session_id)
     project = os.path.basename(os.path.normpath(cwd)) if cwd else "claude"
     now = datetime.now()
-    feed = read_feed(key) or {"entries": []}
-    feed["entries"].append({
-        "kind": kind,
-        "label": LABELS.get(kind, kind),
-        "markdown": markdown,
-        "options": options or [],
-        "time": f"{now:%a %b} {now.day}, {now:%H:%M}",
-    })
-    feed["entries"] = feed["entries"][-MAX_ENTRIES:]
+    old = read_feed(key) or {}
+    if "entries" in old:
+        opened_marker(key).touch()  # a page from before reply files: its tab was already opened
+    n = int(old.get("latest") or 0) + 1
+    item = {"n": n, "kind": kind, "label": LABELS.get(kind, kind),
+            "time": f"{now:%a %b} {now.day}, {now:%H:%M}",
+            "title": reply_title(markdown), "words": len(markdown.split())}
+    write_script(entry_path(key, n), ENTRY_PREFIX, dict(item, markdown=markdown, options=options or []))
+
+    index = read_script(index_path(key), INDEX_PREFIX) or {}
+    items = (index.get("items") or []) + [item]
+    for dropped in items[:-MAX_HISTORY]:
+        entry_path(key, dropped["n"]).unlink(missing_ok=True)
+    items = items[-MAX_HISTORY:]
+    write_script(index_path(key), INDEX_PREFIX, {"items": items})
+
     build = build_id()
     settings = read_settings()
-    feed.update(rev=str(time.time_ns()), build=build, session=key, project=project,
-                branch=git_branch(cwd) if cwd else "",
-                theme=settings.get("theme", ""), themeRev=settings.get("themeRev", ""))
+    feed = {"rev": str(time.time_ns()), "build": build, "session": key, "project": project,
+            "branch": git_branch(cwd) if cwd else "", "latest": n, "first": items[0]["n"],
+            "theme": settings.get("theme", ""), "themeRev": settings.get("themeRev", "")}
     sync_assets()
 
     # Page before feed: an open tab that sees the new build in the feed reloads into the new page.
     page = page_path(key)
-    is_new = not page.exists()
     write_atomic(page, TEMPLATE.read_text(encoding="utf-8")
                  .replace("{{TITLE}}", html.escape(f"{LABELS.get(kind, kind)} - {project}"))
                  .replace("{{CSP}}", html.escape(CSP))
@@ -281,8 +344,8 @@ def render(session_id, cwd, kind, markdown, options=None):
                  .replace("{{PAGE_SRC}}", f"{ASSETS}/{PAGE_JS.name}?v={build}")
                  .replace("{{BUILD}}", build)
                  .replace("{{FEED}}", feed_path(key).name))
-    write_atomic(feed_path(key), FEED_PREFIX + safe_json(feed) + FEED_SUFFIX)
-    return page, is_new
+    write_script(feed_path(key), FEED_PREFIX, feed)
+    return page, key
 
 
 def want_focus(kind):
@@ -310,16 +373,18 @@ def open_page(path, focus=True):
 
 
 def present(session_id, cwd, kind, markdown, options=None, reason="", event="cli", open_mode="auto"):
-    """open_mode: auto (open only a new page), always, never."""
+    """open_mode: auto (open a tab once per session), always, never (store the reply only)."""
     if os.environ.get("PRESENT_DRY_RUN") == "1":
         log(event=event, decision="dry-run", kind=kind, reason=reason)
         return None, "dry-run"
-    path, is_new = render(session_id, cwd, kind, markdown, options)
-    if open_mode == "always" or (open_mode == "auto" and is_new):
+    path, key = render(session_id, cwd, kind, markdown, options)
+    opened = opened_marker(key)
+    if open_mode == "always" or (open_mode == "auto" and not opened.exists()):
         # A page someone asked for comes forward; a hook's mirror only does when Claude is waiting.
         how = open_page(path, focus=event == "cli" or want_focus(kind))
+        opened.touch()
     else:
-        how = "not opened" if is_new else "updated in place"
+        how = "updated in place" if opened.exists() else "stored, no tab yet"
     log(event=event, decision="presented", kind=kind, reason=reason, how=how,
         file=path.name, session=session_key(session_id))
     return path, how
@@ -380,8 +445,7 @@ def turn_text(payload):
     last = (payload.get("last_assistant_message") or "").strip()
     texts = []
     try:
-        turns = read_turns(payload["transcript_path"])
-        texts = turns[-1] if turns else []
+        texts = read_last_turn(payload["transcript_path"])
     except (KeyError, OSError):
         pass
     if last and last not in texts:
@@ -433,11 +497,16 @@ def handle_hook(payload):
                 log(decision="skip", reason="already presented this turn", **ctx)
                 return
         text = turn_text(payload)
-        kind, why = stop_decision(text)
-        if not kind:
-            log(decision="skip", reason=why, **ctx)
+        if not text.strip():
+            log(decision="skip", reason="no reply text", **ctx)
             return
-        present(session_id, cwd, kind, text, None, why, event)
+        kind, why = stop_decision(text)
+        if kind:
+            present(session_id, cwd, kind, text, None, why, event)
+        else:
+            # Short replies go into the history and onto an open page, but never open a tab.
+            asks = bool(ENDS_WITH_QUESTION_RE.search(text.strip()))
+            present(session_id, cwd, "question" if asks else "reply", text, None, why, event, "never")
         if datetime.now().minute % 10 == 0:
             prune()
 

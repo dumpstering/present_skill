@@ -93,13 +93,20 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
 ## How it works
 
 - `out/<session>.html` is a static shell built from `template.html`.
-- `out/<session>.data.js` is the feed: the last 25 entries for that chat. The
-  page reloads it every 1.5 seconds, and again whenever its tab is shown or
-  focused, and re-renders when the feed changes.
+- Each reply is stored once, in its own file (`out/<session>.r000042.js`),
+  and never rewritten. `out/<session>.data.js` is a small pointer (newest
+  reply number, style, build) that the page reloads every 1.5 seconds and
+  whenever its tab is shown or focused. `out/<session>.index.js` lists every
+  reply's title and is fetched only when the history list opens. A chat keeps
+  its last 500 replies.
+- In hook mode every reply is stored, so the history covers the whole chat.
+  Short replies update an open page but never open a tab; only the presenting
+  thresholds above do that. The hook reads the transcript from the end, so a
+  long chat costs no more per turn than a short one.
 - `out/_assets/` holds copies of `page.js` and `marked.umd.js`, because
   browsers restrict a page opened from disk to files in its own folder.
-- The first call for a chat opens a tab in the default browser. Later calls
-  only rewrite the feed. A closed tab is not detected: use `/present open`.
+- The first presented reply in a chat opens a tab in the default browser.
+  Later ones only rewrite the feed. A closed tab is not detected: use `/present open`.
 - When `template.html` or `page.js` changes, an open page reloads itself once.
 - Nothing can pull the browser to the front. A page that arrives while its
   tab is hidden puts `(new)` in the tab title. The tab icon is a dot in the
@@ -108,14 +115,26 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
   question" button on long ones.
 - AskUserQuestion pages (hook mode) show each question's options as cards
   under that question, with a copy button per option.
-- Page controls: style dropdown, Older / Newer (entries in this chat),
-  Slides / Document, Copy markdown, and a copy button on each code block.
+- The page always shows the newest reply, and a new reply takes over the
+  view even while you are reading an older one. `[` and `]` (or Older /
+  Newer) step through earlier replies, `H` (History) opens a list of every
+  reply in the chat, and `Esc` closes the list or returns to the newest.
+- Page controls: style dropdown, Older / Newer, Latest, History,
+  Document / Text slides / Designed slides, Fit to screen, Full screen, Copy
+  markdown, and a copy button on each code block.
 - A page with three or more `##` sections of 220 words or fewer opens as
   slides; anything else opens as a document. Sections split on `#` when there
-  is no `##`. An opening paragraph becomes a lead slide with the headings as
-  an agenda. Any page with two or more sections can be switched by hand; the
-  switch holds for that page only. Keys: `S` slides, `D` document, arrows /
-  space / `J` / `K` to move, Home and End.
+  is no `##`. Any page with two or more sections can be switched by hand.
+- Designed slides (the default slide view) map markdown structure onto
+  layouts: an opening paragraph becomes a cover with the headings as agenda
+  bubbles, bullets that open with a bold phrase become cards, a bold number
+  (`**12** open issues`) becomes a stat tile, numbered lists become step
+  bubbles, a blockquote becomes a callout and tables get a styled frame.
+  Colors come from the active style. Text slides keep the plain layout with a
+  lead slide and agenda. The last slide view you pick and Fit to screen are
+  remembered in browser storage.
+- Keys: `V` designed slides, `S` text slides, `D` document, `F` fit to screen,
+  `P` full screen, arrows / space / `J` / `K` to move, Home and End.
 - If the markdown library fails to load, the reply is shown as plain text.
 
 ## Safety
