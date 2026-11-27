@@ -17,9 +17,10 @@ anywhere, and the page's security policy blocks all network access.
   shrinking or scrolling.
 - **No extra tokens.** `/present:present` copies the previous reply from the
   session transcript. With the bundled hooks, long replies open on their own.
-- **Loose threads.** `/present:present threads` reads your recent Claude
-  Code, Codex and Pi sessions and lists what was left open, ranked, with the
-  command to pick each one back up.
+- **Loose threads and session recap.** `/present:present threads` reads your
+  recent Claude Code, Codex and Pi sessions. One tab ranks what was left open,
+  with its age and the command to pick it back up. The other summarizes every
+  session by topic and outcome, and shows which are still running.
 - **Thirteen page styles**, keyboard, mouse and touch navigation, history of
   every reply in the chat, and a live "12 min ago" on each one.
 

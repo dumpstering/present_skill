@@ -96,6 +96,8 @@ LABELS = {"reply": "Reply", "question": "Waiting on you", "ask": "Waiting on you
 THREAD_PRIORITIES = ("high", "medium", "low")
 THREAD_EFFORTS = ("quick", "medium", "long")
 THREAD_FIELDS = ("title", "why", "next", "project", "source", "session")
+SESSION_STATUSES = ("running", "waiting", "stopped", "done")
+SESSION_FIELDS = ("session", "title", "source", "project", "summary", "resume")
 
 
 def log(**fields):
@@ -330,6 +332,17 @@ def threads_board(board):
         c["effort"] = t.get("effort") if t.get("effort") in THREAD_EFFORTS else "medium"
         c["at"] = t.get("at") if isinstance(t.get("at"), int) else 0
         clean.append(c)
+    sessions = []
+    for i, x in enumerate(board.get("sessions") or [], 1):
+        if not isinstance(x, dict) or not str(x.get("title") or "").strip():
+            raise ValueError(f"session {i} needs a title")
+        c = {k: str(x.get(k) or "").strip() for k in SESSION_FIELDS}
+        c["status"] = x.get("status") if x.get("status") in SESSION_STATUSES else "done"
+        for k in ("started", "at"):
+            c[k] = x.get(k) if isinstance(x.get(k), int) else 0
+        c["topics"] = [{"topic": str(tp.get("topic") or "").strip(), "outcome": str(tp.get("outcome") or "").strip()}
+                       for tp in (x.get("topics") or []) if isinstance(tp, dict) and tp.get("topic")]
+        sessions.append(c)
     title = str(board.get("title") or "Loose threads").strip()
     summary = str(board.get("summary") or "").strip()
     lines = [f"# {title}", ""] + ([summary, ""] if summary else [])
@@ -340,7 +353,15 @@ def threads_board(board):
             lines += [c["why"], ""]
         if c["next"]:
             lines += ["```", c["next"], "```", ""]
-    return "\n".join(lines), {"title": title, "summary": summary, "threads": clean}
+    if sessions:
+        lines += ["# Sessions", ""]
+    for c in sorted(sessions, key=lambda c: c["at"], reverse=True):
+        tags = " · ".join(x for x in (c["status"], c["project"], c["source"]) if x)
+        lines += [f"## {c['title']}", "", f"*{tags}*", ""] + ([c["summary"], ""] if c["summary"] else [])
+        lines += [f"- **{tp['topic']}**: {tp['outcome']}" for tp in c["topics"]] + ([""] if c["topics"] else [])
+        if c["resume"]:
+            lines += ["```", c["resume"], "```", ""]
+    return "\n".join(lines), {"title": title, "summary": summary, "threads": clean, "sessions": sessions}
 
 
 def render(session_id, cwd, kind, markdown, options=None, board=None):

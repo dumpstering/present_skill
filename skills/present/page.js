@@ -313,7 +313,7 @@
 
   function tickAges() {
     if (state.entry) setAge($("age"), state.entry.at);
-    var spans = $("hlist").querySelectorAll(".age");
+    var spans = document.querySelectorAll(".age[data-at]");
     for (var i = 0; i < spans.length; i++) setAge(spans[i], Number(spans[i].dataset.at));
   }
 
@@ -331,27 +331,97 @@
     });
   }
 
-  function threadCard(t) {
+  var STATUS_LABELS = { running: "running", waiting: "waiting on you", stopped: "ended early", done: "done" };
+
+  function ageChip(at) {
+    var age = el("span", "age");
+    age.dataset.at = at || "";
+    setAge(age, at);
+    return age;
+  }
+
+  function lengthText(seconds) {
+    var min = Math.round(seconds / 60);
+    return min < 60 ? min + " min" : min < 48 * 60 ? Math.round(min / 60) + " h" : Math.round(min / 1440) + " d";
+  }
+
+  function nextStep(text) {
+    var next = el("div", "tnext");
+    next.append(el("code", "", text), copyButton(function () { return text; }));
+    return next;
+  }
+
+  // goToSession is null when the thread names no session on this board.
+  function threadCard(t, sessionTitle, goToSession) {
     var card = el("div", "thread p-" + t.priority), tags = el("div", "ttags");
     tags.append(el("span", "tag pri", t.priority), el("span", "tag", EFFORT_LABELS[t.effort] || t.effort));
     [t.project, t.source].filter(Boolean).forEach(function (x) { tags.appendChild(el("span", "tag", x)); });
+    if (t.at) tags.appendChild(ageChip(t.at));
     card.append(tags, el("div", "ttitle", t.title));
     if (t.why) card.appendChild(el("div", "twhy", t.why));
-    if (t.next) {
-      var next = el("div", "tnext");
-      next.append(el("code", "", t.next), copyButton(function () { return t.next; }));
-      card.appendChild(next);
+    if (t.next) card.appendChild(nextStep(t.next));
+    if (goToSession) {
+      var from = el("button", "tfrom", "From: " + sessionTitle);
+      from.type = "button";
+      from.addEventListener("click", goToSession);
+      card.appendChild(from);
     }
     return card;
   }
 
+  function sessionCard(s, openThreads) {
+    var card = el("div", "session st-" + s.status), tags = el("div", "ttags");
+    card.dataset.session = s.session;
+    tags.appendChild(el("span", "tag sstatus", STATUS_LABELS[s.status] || s.status));
+    [s.project, s.source].filter(Boolean).forEach(function (x) { tags.appendChild(el("span", "tag", x)); });
+    if (s.at) tags.appendChild(ageChip(s.at));
+    if (s.started && s.at > s.started) tags.appendChild(el("span", "tag", "ran " + lengthText(s.at - s.started)));
+    if (openThreads) tags.appendChild(el("span", "tag open", openThreads + " open"));
+    card.append(tags, el("div", "stitle", s.title));
+    if (s.summary) card.appendChild(el("div", "twhy", s.summary));
+    if ((s.topics || []).length) {
+      var list = el("ul", "topics");
+      s.topics.forEach(function (tp) {
+        var li = el("li", "topic");
+        li.append(el("span", "ttopic", tp.topic), el("span", "toutcome", tp.outcome));
+        list.appendChild(li);
+      });
+      card.appendChild(list);
+    }
+    if (s.resume) card.appendChild(nextStep(s.resume));
+    return card;
+  }
+
+  // Two views of one scan: what is still open, and what every session did (newest first).
   function buildBoard(board) {
-    var box = el("div", "board"), bar = el("div", "tsort"), list = el("div", "threads");
-    var by = storeGet(SORT_KEY) || "priority";
+    var threads = board.threads || [], sessions = board.sessions || [];
+    var box = el("div", "board"), tabs = el("div", "btabs");
+    var threadPane = el("div", "bpane"), sessionPane = el("div", "bpane");
+    var bar = el("div", "tsort"), list = el("div", "threads"), cards = el("div", "sessions");
+    var by = storeGet(SORT_KEY) || "priority", byId = {}, openCount = {};
+    sessions.forEach(function (s) { if (s.session) byId[s.session] = s; });
+    threads.forEach(function (t) { if (t.session) openCount[t.session] = (openCount[t.session] || 0) + 1; });
+
+    function showPane(name) {
+      threadPane.hidden = name !== "threads";
+      sessionPane.hidden = name !== "sessions";
+      for (var i = 0; i < tabs.children.length; i++) tabs.children[i].classList.toggle("on", tabs.children[i].dataset.pane === name);
+    }
+    function goToSession(id) {
+      showPane("sessions");
+      var all = cards.querySelectorAll(".session");
+      for (var i = 0; i < all.length; i++) all[i].classList.toggle("hl", all[i].dataset.session === id);
+      var card = cards.querySelector(".session.hl");
+      if (card) card.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
     function fill() {
-      list.replaceChildren.apply(list, sortThreads(board.threads || [], by).map(threadCard));
+      list.replaceChildren.apply(list, sortThreads(threads, by).map(function (t) {
+        var s = t.session && byId[t.session];
+        return threadCard(t, s && s.title, s ? function () { goToSession(t.session); } : null);
+      }));
       for (var i = 0; i < bar.children.length; i++) bar.children[i].classList.toggle("on", bar.children[i].dataset.sort === by);
     }
+
     SORTS.forEach(function (s) {
       var b = el("button", "", s[1]);
       b.type = "button";
@@ -359,11 +429,27 @@
       b.addEventListener("click", function () { by = s[0]; storeSet(SORT_KEY, by); fill(); });
       bar.appendChild(b);
     });
+    [["threads", "Loose threads", threads.length], ["sessions", "Sessions", sessions.length]].forEach(function (p) {
+      var b = el("button", "", p[1] + " ");
+      b.type = "button";
+      b.dataset.pane = p[0];
+      b.appendChild(el("span", "n", String(p[2])));
+      b.addEventListener("click", function () { showPane(p[0]); });
+      tabs.appendChild(b);
+    });
+
     box.appendChild(el("h1", "", board.title || "Loose threads"));
     if (board.summary) box.appendChild(el("p", "tsummary", board.summary));
-    if (!(board.threads || []).length) box.appendChild(el("p", "tsummary", "Nothing left open."));
-    box.append(bar, list);
+    if (sessions.length) box.appendChild(tabs);
+    if (!threads.length) threadPane.appendChild(el("p", "tsummary", "Nothing left open."));
+    threadPane.append(bar, list);
+    sessions.slice().sort(function (a, b) { return (b.at || 0) - (a.at || 0); }).forEach(function (s) {
+      cards.appendChild(sessionCard(s, openCount[s.session] || 0));
+    });
+    sessionPane.appendChild(cards);
+    box.append(threadPane, sessionPane);
     fill();
+    showPane("threads");
     return box;
   }
 

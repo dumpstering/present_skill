@@ -30,6 +30,12 @@ class DigestTest(unittest.TestCase):
             {"type": "ai-title", "aiTitle": "Fix the slide splitter"},
             {"type": "user", "cwd": "/tmp/proj", "timestamp": ts, "message": {"content": "split tall slides"}},
             {"type": "user", "isMeta": True, "timestamp": ts, "message": {"content": "<command-name>x</command-name>"}},
+            {"type": "assistant", "timestamp": ts, "message": {"content": [{"type": "text", "text": "Split at list items."}]}},
+            {"type": "user", "timestamp": ts, "message": {"content": "Another Claude session sent a message: <teammate-message>relayed</teammate-message>"}},
+            {"type": "user", "timestamp": ts, "message": {"content": "This session is being continued from a previous conversation that ran out of context. summary"}},
+            {"type": "user", "timestamp": ts, "message": {"content": "<pasted_content id=\"x1\">pasted handoff</pasted_content id=\"x1\">"}},
+            {"type": "assistant", "timestamp": ts, "message": {"content": [{"type": "text", "text": "Read the handoff."}]}},
+            {"type": "user", "timestamp": ts, "message": {"content": "now open a PR"}},
             {"type": "assistant", "timestamp": ts, "message": {"content": [{"type": "text", "text": "Done. Should I merge PR #3?"}]}},
         ])
         write_jsonl(proj / "bbbb2222.jsonl", [
@@ -91,6 +97,27 @@ class DigestTest(unittest.TestCase):
     def test_exclude_drops_the_running_session(self):
         text = threads.digest(threads.window_seconds("1d"), exclude="aaaa1111", use_gh=False)
         self.assertNotIn("aaaa1111", text)
+
+    def test_turns_pair_each_ask_with_its_outcome(self):
+        block = self.text.split("## claude aaaa1111")[1].split("\n## ")[0]
+        self.assertIn("- turn 1 ask: split tall slides\n  outcome: Split at list items.", block)
+        self.assertIn("- turn 3 ask: now open a PR\n  outcome: Done. Should I merge PR #3?", block)
+        self.assertIn("- turns: 3", block)
+
+    def test_skips_compaction_summaries_but_keeps_pasted_asks(self):
+        self.assertNotIn("being continued", self.text)
+        self.assertIn("pasted handoff", self.text)
+
+    def test_skips_messages_relayed_from_other_sessions(self):
+        self.assertNotIn("relayed", self.text)
+
+    def test_status_running_only_when_recently_active(self):
+        ended = threads.epoch("2026-11-26T20:00:00Z")
+        soon = threads.digest(threads.window_seconds("1m"), use_gh=False, now=ended + 120)
+        later = threads.digest(threads.window_seconds("1m"), use_gh=False, now=ended + 3600)
+        self.assertIn("- status: running now", soon)
+        self.assertNotIn("running now", later)
+        self.assertIn("- status: ended", later)
 
     def test_window_parsing(self):
         self.assertEqual(threads.window_seconds("4h"), 4 * 3600)

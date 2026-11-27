@@ -329,6 +329,50 @@ for (const [name, engine] of Object.entries(engines)) {
         && /mediumone session/.test(orders.tags) && /lowquick/.test(orders.tags) && /highmulti-session/.test(orders.tags),
       JSON.stringify(orders));
 
+    // Sessions: a second tab summarizes every session by topic; threads show their age and link to their session.
+    const nowSec = Math.floor(Date.now() / 1000);
+    const board2 = join(out, "board2.json");
+    writeFileSync(board2, JSON.stringify({ title: "Loose threads, last day", threads: [
+      { title: "Push the export branch", priority: "high", effort: "quick", at: nowSec - 3 * 3600, session: "s-api", next: "git push" },
+      { title: "Answer the layout question", priority: "medium", effort: "medium", at: nowSec - 20 * 60, session: "s-ui" },
+    ], sessions: [
+      { session: "s-api", title: "API export work", source: "codex", project: "api", status: "stopped", started: nowSec - 5 * 3600, at: nowSec - 3 * 3600,
+        summary: "Built the CSV export.", topics: [{ topic: "CSV export", outcome: "Endpoint done, 3 commits not pushed." }, { topic: "Rate limits", outcome: "Left at the defaults." }],
+        resume: "cd ~/git/api && codex resume s-api" },
+      { session: "s-ui", title: "Settings page", source: "claude", project: "web", status: "waiting", started: nowSec - 40 * 60, at: nowSec - 20 * 60,
+        summary: "Redesigned settings.", topics: [{ topic: "Layout", outcome: "Two options drafted, waiting on a pick." }], resume: "cd ~/git/web && claude --resume s-ui" },
+    ] }));
+    present(out, settings, ["show", board2, "--kind", "threads", "--session=sessboard", "--no-open"]);
+    const sessPage = await browser.newPage();
+    sessPage.on("pageerror", (e) => problems.push(String(e)));
+    await sessPage.goto(pathToFileURL(join(out, "sessboar.html")).href);
+    await sessPage.waitForFunction(() => document.querySelectorAll("#article .thread").length === 2, null, { timeout: 8000 }).catch(() => {});
+    const sess = await sessPage.evaluate(() => ({
+      tabs: [...document.querySelectorAll("#article .btabs button")].map((b) => b.textContent.replace(/\s+/g, " ").trim()),
+      ages: [...document.querySelectorAll("#article .thread .age")].map((a) => a.textContent + ":" + a.className),
+      links: [...document.querySelectorAll("#article .thread .tfrom")].map((a) => a.textContent),
+    }));
+    await sessPage.click('#article .tsort button[data-sort="newest"]');
+    sess.newest = await sessPage.evaluate(() => [...document.querySelectorAll("#article .thread .ttitle")].map((t) => t.textContent.split(" ")[0]).join(","));
+    await sessPage.click("#article .thread .tfrom >> nth=1");
+    sess.after = await sessPage.evaluate(() => ({
+      tab: (document.querySelector("#article .btabs button.on") || {}).textContent,
+      cards: document.querySelectorAll("#article .session").length,
+      visible: [...document.querySelectorAll("#article .session")].filter((c) => c.offsetParent !== null).length,
+      highlighted: (document.querySelector("#article .session.hl .stitle") || {}).textContent,
+      topics: document.querySelectorAll("#article .session .topic").length,
+      status: [...document.querySelectorAll("#article .session .sstatus")].map((x) => x.textContent).join("|"),
+      sessionAges: document.querySelectorAll("#article .session .age").length,
+    }));
+    check("sessions tab: summaries by topic, thread ages, links from threads to sessions",
+      sess.tabs.join("|") === "Loose threads 2|Sessions 2"
+        && /^3 h ago:age superstale$/.test(sess.ages[0] || "") && /^20 min ago:age stale$/.test(sess.ages[1] || "")
+        && sess.links.length === 2 && sess.newest === "Answer,Push"
+        && /^Sessions/.test(sess.after.tab || "") && sess.after.cards === 2 && sess.after.visible === 2
+        && sess.after.highlighted === "API export work" && sess.after.topics === 3
+        && /ended early/.test(sess.after.status) && /waiting on you/.test(sess.after.status) && sess.after.sessionAges === 2,
+      JSON.stringify(sess));
+
     // Mouse: one slide per wheel gesture, click right to advance and left to go back, mouse side buttons.
     const mousePage = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     mousePage.on("pageerror", (e) => problems.push(String(e)));
