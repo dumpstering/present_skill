@@ -10,7 +10,6 @@
   var SESSION = FEED.replace(/\.data\.js$/, "");
   var POLL_MS = 1500;
   var SLIDE_MIN_SECTIONS = 3;
-  var SLIDE_MAX_WORDS = 220;
   var BANNERS = {
     plan: "Claude is waiting for plan approval. Approve or give feedback in the chat.",
     ask: "Claude is asking. Pick an option in the chat; the copy buttons grab the label.",
@@ -25,7 +24,6 @@
   var STYLE_KEY = "present.slideStyle", FIT_KEY = "present.fit";
   // A bold lead that is just a number ("**12**", "**~40%**", "**3.2x**") makes the list a row of stat tiles.
   var STAT_RE = /^[~\u2248<>$+-]?\s*\d[\d.,]*\s*(%|[kKMB]|x|ms|s|m|h|d|wk|mo|yr|lb|kg|bpm|TB|GB|MB|KB|kB)?\+?$/;
-  var DENSE_WORDS = 130;
 
   // Looks defined in template.html; the first is the default.
   var THEMES = [
@@ -148,11 +146,6 @@
     return b;
   }
 
-  function wordCount(node) {
-    var text = node.textContent.trim();
-    return text ? text.split(/\s+/).length : 0;
-  }
-
   // Wrap the article into one <section> per h2, or per h1 when there is no h2. Content before
   // the first such heading is its own section.
   function sectionize(article) {
@@ -171,8 +164,7 @@
   }
 
   function slideEligible(sections) {
-    return sections.filter(isHeaded).length >= SLIDE_MIN_SECTIONS &&
-      sections.every(function (s) { return wordCount(s) <= SLIDE_MAX_WORDS; });
+    return sections.filter(isHeaded).length >= SLIDE_MIN_SECTIONS;
   }
 
   function buildOutline(article) {
@@ -290,7 +282,7 @@
     setKeys(on);
     if (state.mode === "designed") designDeck();
     else if (on) addAgenda();
-    if (on) showSlide(); else fit();
+    if (on) { paginate(); showSlide(); } else fit();
   }
 
   function preferredSlideMode() {
@@ -407,7 +399,6 @@
   }
 
   function designSection(section, num) {
-    var dense = wordCount(section) > DENSE_WORDS;
     var kids = Array.prototype.slice.call(section.children);
     var heading = kids.shift();
     var head = el("div", "dhead");
@@ -425,7 +416,6 @@
       body.appendChild(node);
     });
     section.classList.add("dslide");
-    section.classList.toggle("dense", dense);
     section.replaceChildren(head, body);
   }
 
@@ -465,6 +455,110 @@
     if (cover.parentNode !== article) article.insertBefore(cover, article.firstChild);
     var num = 0;
     sections.forEach(function (s) { if (s !== cover && isHeaded(s)) designSection(s, ++num); });
+  }
+
+  // ---------- pagination: a section taller than the stage continues on more slides ----------
+  // Where a block's items live and an empty copy to move trailing items into, or null when the
+  // block can't be split (code, quotes, paragraphs). Tables keep their header on every part.
+  function splitParts(block) {
+    var table = block.tagName === "TABLE" ? block : block.classList.contains("dtable") ? block.querySelector("table") : null;
+    if (table) {
+      if (!table.tBodies[0]) return null;
+      var copy = block.cloneNode(false), tableCopy = table === block ? copy : copy.appendChild(table.cloneNode(false));
+      if (table.tHead) tableCopy.appendChild(table.tHead.cloneNode(true));
+      return { from: table.tBodies[0], block: copy, to: tableCopy.appendChild(table.tBodies[0].cloneNode(false)) };
+    }
+    if (/^(UL|OL)$/.test(block.tagName) || block.classList.contains("cards") || block.classList.contains("stats")) {
+      var list = block.cloneNode(false);
+      return { from: block, block: list, to: list };
+    }
+    return null;
+  }
+
+  // Move trailing items out of block until what is left fits. Returns the moved part, or null
+  // (with nothing moved) when the block can't be split or even its first item doesn't fit.
+  function splitBlock(block, fits) {
+    var p = splitParts(block);
+    if (!p) return null;
+    while (!fits() && p.from.children.length > 1) p.to.insertBefore(p.from.lastElementChild, p.to.firstChild);
+    if (!p.to.children.length || !fits()) {
+      while (p.to.firstChild) p.from.appendChild(p.to.firstChild);
+      return null;
+    }
+    if (block.tagName === "OL" && !block.classList.contains("steps")) p.block.start = (block.start || 1) + p.from.children.length;
+    if (block.classList.contains("cards")) {
+      block.className = "cards n" + block.children.length;
+      p.block.className = "cards n" + p.block.children.length;
+    }
+    return p.block;
+  }
+
+  // Fill pages block by block. A block that overflows is split at its items (list items, cards,
+  // table rows) or, if it can't be, moved whole to the next page. A subheading never ends a page.
+  function paginateSection(section, maxH) {
+    var designed = section.classList.contains("dslide");
+    var head = section.firstElementChild;
+    var body = designed ? section.querySelector(":scope > .dbody") : section;
+    var page = section, parts = [section];
+    var fits = function () { return page.offsetHeight <= maxH; };
+    var blockCount = function () { return body.children.length - (designed ? 0 : 1); };
+
+    function newPage() {
+      var last = body.lastElementChild;
+      var carry = blockCount() > 1 && /^H[1-6]$/.test(last.tagName) ? last : null;
+      page.classList.remove("on");
+      var next = section.cloneNode(false), headCopy = head.cloneNode(true);
+      headCopy.removeAttribute("id");
+      headCopy.querySelectorAll("[id]").forEach(function (n) { n.removeAttribute("id"); });
+      next.appendChild(headCopy);
+      body = designed ? next.appendChild(el("div", "dbody")) : next;
+      page.after(next);
+      parts.push(next);
+      page = next;
+      page.classList.add("on");
+      if (carry) body.appendChild(carry);
+    }
+
+    function place(block) {
+      body.appendChild(block);
+      if (fits()) return;
+      var rest = splitBlock(block, fits);
+      if (rest) { newPage(); place(rest); return; }
+      if (blockCount() > 1) { block.remove(); newPage(); place(block); }
+    }
+
+    section.classList.add("on");
+    if (fits() || !body) { section.classList.remove("on"); return; }
+    var blocks = Array.prototype.slice.call(body.children).filter(function (n) { return n !== head; });
+    blocks.forEach(function (b) { b.remove(); });
+    blocks.forEach(place);
+    page.classList.remove("on");
+    if (parts.length < 2) return;
+    parts.forEach(function (p, i) {
+      var title = designed ? p.firstElementChild.lastElementChild : p.firstElementChild;
+      title.appendChild(el("span", "part", (i + 1) + " / " + parts.length));
+    });
+  }
+
+  // Measured at zoom 1 against the stage, so fit() only ever scales a slide up.
+  function paginate() {
+    var stage = $("article"), cs = getComputedStyle(stage);
+    var maxH = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    if (maxH <= 0) return;
+    Array.prototype.slice.call(slideSections()).forEach(function (section) {
+      // The cover and the text-slide lead are summaries; they stay one slide.
+      if (section.classList.contains("dslide") || isHeaded(section)) paginateSection(section, maxH);
+    });
+  }
+
+  // Re-paginate when the stage changes size: a window resize or entering/leaving full screen.
+  var relayoutTimer = null;
+  function relayout() {
+    clearTimeout(relayoutTimer);
+    relayoutTimer = setTimeout(function () {
+      if (state.entry && $("doc").classList.contains("slides")) draw(true);
+      else fit();
+    }, 150);
   }
 
   // Zoom the current slide so it fills the stage. Width is pinned to its natural size first so the
@@ -734,8 +828,8 @@
   });
   $("fit").addEventListener("click", toggleFit);
   $("full").addEventListener("click", toggleFull);
-  window.addEventListener("resize", fit);
-  document.addEventListener("fullscreenchange", function () { requestAnimationFrame(fit); });
+  window.addEventListener("resize", relayout);
+  document.addEventListener("fullscreenchange", relayout);
   document.addEventListener("keydown", function (ev) {
     if (ev.ctrlKey || ev.metaKey || ev.altKey || /^(SELECT|INPUT|TEXTAREA)$/.test(ev.target.tagName)) return;
     var key = ev.key.toLowerCase();

@@ -9,8 +9,9 @@ access.
   transcript, so it costs no extra output.
 - Claude may also use it on its own for a long read, and keeps the bottom
   line and any question in the chat.
-- Three or more short sections open as slides; anything else opens as a
-  scrolling document. `S` and `D` switch between the two.
+- Three or more sections open as slides; anything else opens as a scrolling
+  document. A section too tall for one slide continues on the next, so slides
+  never scroll or shrink. `S` and `D` switch between the two.
 - Thirteen page styles, picked from a dropdown on the page or with
   `/present theme <name>`.
 
@@ -122,9 +123,13 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
 - Page controls: style dropdown, Older / Newer, Latest, History,
   Document / Text slides / Designed slides, Fit to screen, Full screen, Copy
   markdown, and a copy button on each code block.
-- A page with three or more `##` sections of 220 words or fewer opens as
-  slides; anything else opens as a document. Sections split on `#` when there
-  is no `##`. Any page with two or more sections can be switched by hand.
+- A page with three or more `##` sections opens as slides; anything else
+  opens as a document. Sections split on `#` when there is no `##`. Any page
+  with two or more sections can be switched by hand.
+- A section taller than the screen continues on extra slides, labeled `1 / 2`
+  and so on. It splits between blocks, then between list items, cards or table
+  rows (the table header repeats); a subheading never ends a slide. Slides are
+  re-split when the window resizes or enters full screen.
 - Designed slides (the default slide view) map markdown structure onto
   layouts: an opening paragraph becomes a cover with the headings as agenda
   bubbles, bullets that open with a bold phrase become cards, a bold number
@@ -216,7 +221,8 @@ They help in the chat too:
 ## Browser presentations
 - Lead with the bottom line in the first sentence or two.
 - Use ## headings only when there are three or more distinct sections. Three or
-  more short sections render as slides; everything else as a scrolling document.
+  more sections render as slides (long ones continue onto extra slides);
+  everything else as a scrolling document.
 - When you need something from me, put it last: one explicit question, or
   numbered options.
 - Don't hand-write HTML for ordinary replies; the hook already renders them.

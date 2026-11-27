@@ -352,6 +352,8 @@
   .slides article > section.on { display: block; animation: fade .18s ease-out; }
   .slides article h1 { margin-top: 0; }
   .slides article h2 { font-size: calc(var(--h2-size) * 1.55); line-height: 1.1; border-top: 0; padding-top: 0; margin-top: 0; }
+  /* "2 / 3" after the heading of a section that continues across slides. */
+  .slides .part { margin-left: 0.6em; font: 500 0.42em var(--ui-font); letter-spacing: 0; color: var(--muted); vertical-align: middle; white-space: nowrap; }
   .slides article h3 { font-size: calc(var(--h3-size) * 1.33); }
   .slides article pre { font-size: 15px; }
   .slides article p, .slides article li { max-width: none; }
@@ -438,8 +440,6 @@
   .bubble { display: inline-flex; align-items: center; gap: 10px; padding: 7px 18px 7px 7px; border-radius: 999px; font-size: 0.8em;
     background: rgb(255 255 255 / .14); border: 1px solid rgb(255 255 255 / .26); }
   .bubble b { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--hero-ink); color: var(--bubble-ink); font-size: 13px; flex: none; }
-  .deck section.dense { font-size: 0.86em; }
-  .deck section.dense .dlead p { font-size: 1.1em; }
   .dbody > .optgroup { margin-top: 18px; }
 
   .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);

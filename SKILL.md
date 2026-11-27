@@ -56,8 +56,8 @@ Keep it in chat instead when:
 
 - Lead with the bottom line.
 - Use `##` headings only for three or more distinct sections. Three or more
-  short sections (220 words or fewer each) open as slides; everything else
-  opens as a scrolling document.
+  sections open as slides; a section too tall for one slide continues on the
+  next. Everything else opens as a scrolling document.
 - Put the question or numbered options last.
 - Slides open in the designed style by default: bullets that open with a bold phrase
   become cards, a bold number (`**12** open issues`) a stat tile, a numbered list step
