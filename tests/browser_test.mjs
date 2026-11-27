@@ -13,7 +13,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium, firefox, webkit } from "playwright";
 
-const ROOT = process.env.PRESENT_ROOT || resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = process.env.PRESENT_ROOT || resolve(dirname(fileURLToPath(import.meta.url)), "..", "skills", "present");
 const PY = process.env.PYTHON || (process.platform === "win32" ? "python" : "python3");
 const only = process.argv.slice(2);
 const engines = { chromium, firefox, webkit };

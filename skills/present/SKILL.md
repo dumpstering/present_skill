@@ -1,6 +1,6 @@
 ---
 name: present
-description: Open a long reply, plan or question as a formatted page in the user's browser (one tab per chat, updated in place, local files only), or a board of loose threads left open across recent Claude Code, Codex and Pi sessions. Optional. Use for "/present", "/present threads", "what did I leave open", "loose threads", "open that in the browser", "show me that as a page", or on your own when a read-only reply would run long - past about 400 words, a wide table, or several sections - and the user has not said to keep it in chat.
+description: Open a long reply, plan or question as a formatted page in the user's browser (one tab per chat, updated in place, local files only), or a board of loose threads left open across recent Claude Code, Codex and Pi sessions. Optional. Use for "/present:present", "/present:present threads", "what did I leave open", "loose threads", "open that in the browser", "show me that as a page", or on your own when a read-only reply would run long - past about 400 words, a wide table, or several sections - and the user has not said to keep it in chat.
 argument-hint: "optional: last (default: previous reply) | back N | threads [1h|4h|1d|1w|1m] | open | theme [name] | on | off | status | prune"
 ---
 
@@ -10,9 +10,14 @@ Renders markdown to a local HTML page and opens it in the default browser.
 The page re-reads its feed every 1.5 seconds, so a later call updates the
 same tab. Nothing is sent anywhere.
 
-The script is `present.py` in this skill's base directory (shown at the top
-of this message). Run it as `python3 -I "<base directory>/present.py" ...`;
-on Windows use `python` in place of `python3`. Details: [README.md](README.md).
+Every `present.py ...` below means this exact command, with the rest of the
+arguments added:
+
+`PRESENT_DATA="${CLAUDE_PLUGIN_DATA}" python3 -I "${CLAUDE_SKILL_DIR}/present.py" ...`
+
+`PRESENT_DATA` keeps pages and settings in the plugin's data folder, which
+survives updates. On Windows use `python` in place of `python3`. Details are in
+the plugin's README.
 
 This chat's session id: `${CLAUDE_SESSION_ID}`. Pass it as `--session=<id>` on
 every `show` and `turn` call. If the id above is blank or still a `$`
@@ -22,7 +27,7 @@ Only use this where the session runs on the user's own computer. In a remote,
 cloud, SSH or container session there is no browser to open: say so and keep
 the reply in chat.
 
-## The user asks (`/present ...`)
+## The user asks (`/present:present ...`)
 
 | Argument | Run |
 |---|---|
@@ -68,11 +73,11 @@ Keep it in chat instead when:
 - Raw HTML and images are shown as text, by design. For charts or custom
   layout, write a separate HTML file.
 
-## Loose threads (`/present threads [1h|4h|1d|1w|1m]`)
+## Loose threads (`/present:present threads [1h|4h|1d|1w|1m]`)
 
 Find work left open across recent sessions and present it as a ranked board.
 
-1. `python3 -I "<base directory>/threads.py" --since <window> --exclude <id> --out <scratch>/digest.md`
+1. `python3 -I "${CLAUDE_SKILL_DIR}/threads.py" --since <window> --exclude <id> --out <scratch>/digest.md`
    (`<id>` is this chat's session id). It lists every main Claude Code, Codex and Pi
    session active in the window: first and latest asks, the last reply, flags
    (interrupted, ends with a question), a resume command, and git state per folder

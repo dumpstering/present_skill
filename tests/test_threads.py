@@ -7,7 +7,7 @@ import time
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "present"))
 import threads  # noqa: E402
 
 

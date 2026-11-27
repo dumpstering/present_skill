@@ -1,0 +1,14 @@
+{
+  "name": "present-marketplace",
+  "owner": {
+    "name": "dumpstering"
+  },
+  "description": "The present plugin: replies as browser pages, and a loose-threads board.",
+  "plugins": [
+    {
+      "name": "present",
+      "source": "./",
+      "description": "Open long replies, plans and questions as a formatted page in your browser, and find loose threads across recent sessions."
+    }
+  ]
+}

@@ -5,19 +5,19 @@ page in your browser. One page per chat, updated in place. Local files only:
 nothing is sent anywhere, and the page's security policy blocks all network
 access.
 
-- `/present` opens the previous reply. It is copied from the session
+- `/present:present` opens the previous reply. It is copied from the session
   transcript, so it costs no extra output.
 - Claude may also use it on its own for a long read, and keeps the bottom
   line and any question in the chat.
 - Three or more sections open as slides; anything else opens as a scrolling
   document. A section too tall for one slide continues on the next, so slides
   never scroll or shrink. `S` and `D` switch between the two.
-- `/present threads [1h|4h|1d|1w|1m]` finds work left open across recent
+- `/present:present threads [1h|4h|1d|1w|1m]` finds work left open across recent
   Claude Code, Codex and Pi sessions (`threads.py` reads the transcripts and git
   state) and shows it as cards ranked by priority, with a sort toggle for quick
   wins or newest and a copyable command to close each one.
 - Thirteen page styles, picked from a dropdown on the page or with
-  `/present theme <name>`.
+  `/present:present theme <name>`.
 
 Runs on Windows, macOS and Linux, and works in Chrome, Edge, Firefox and
 Safari. Based on "browser presentations" by Cody
@@ -32,22 +32,37 @@ Safari. Based on "browser presentations" by Cody
 
 ## Install
 
-Clone into your skills folder as `present`.
-
-macOS / Linux:
+This repo is a Claude Code plugin and its own marketplace:
 
 ```
-git clone https://github.com/dumpstering/present_skill ~/.claude/skills/present
+/plugin install present --marketplace dumpstering/present_skill
 ```
 
-Windows (PowerShell):
+Or in two steps: `/plugin marketplace add dumpstering/present_skill`, then
+`/plugin install present@present-marketplace`. The skill is then
+`/present:present` (for example `/present:present status`).
 
-```
-git clone https://github.com/dumpstering/present_skill "$env:USERPROFILE\.claude\skills\present"
+To update on its own, turn on auto-update for the marketplace in `/plugin` >
+Marketplaces, or in `~/.claude/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "present-marketplace": {
+      "source": {"source": "github", "repo": "dumpstering/present_skill"},
+      "autoUpdate": true
+    }
+  }
+}
 ```
 
-For one project only, clone into `<project>/.claude/skills/present` instead.
-Start a new chat and type `/present status`.
+The plugin has no `version`, so every commit to `main` is an update. Claude
+Code checks in the background and the new version loads on the next start or
+`/reload-plugins`.
+
+Pages, the chosen style, the log and the hook-mode switch live in the plugin's
+data folder (`~/.claude/plugins/data/present-present-marketplace/`), which
+survives updates and is removed when the plugin is uninstalled.
 
 ## Use
 
@@ -55,12 +70,12 @@ In a chat:
 
 | You type | What happens |
 |---|---|
-| `/present` | Opens the previous reply as a page |
-| `/present back 2` | The reply before that |
-| `/present open` | Reopens the newest page (use this if you closed the tab) |
-| `/present theme` | Lists the styles |
-| `/present theme brutalist-raw` | Switches every open page to that style |
-| `/present status` | Shows the current state |
+| `/present:present` | Opens the previous reply as a page |
+| `/present:present back 2` | The reply before that |
+| `/present:present open` | Reopens the newest page (use this if you closed the tab) |
+| `/present:present theme` | Lists the styles |
+| `/present:present theme brutalist-raw` | Switches every open page to that style |
+| `/present:present status` | Shows the current state |
 
 From a shell (`python` on Windows, `python3` elsewhere):
 
@@ -87,7 +102,7 @@ light or dark setting. The others are fixed schemes:
 
 The newest choice wins, whether you made it in the dropdown or with
 `present.py theme`. The dropdown choice is kept in the browser's storage; the
-`theme` command is kept in `settings.json` in this folder.
+`theme` command is kept in `settings.json` in the plugin's data folder.
 
 Fonts are whatever is installed: the page loads nothing from the network, so
 each style names its ideal font first and falls back to a system one.
@@ -111,7 +126,7 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
 - `out/_assets/` holds copies of `page.js` and `marked.umd.js`, because
   browsers restrict a page opened from disk to files in its own folder.
 - The first presented reply in a chat opens a tab in the default browser.
-  Later ones only rewrite the feed. A closed tab is not detected: use `/present open`.
+  Later ones only rewrite the feed. A closed tab is not detected: use `/present:present open`.
 - When `template.html` or `page.js` changes, an open page reloads itself once.
 - Nothing can pull the browser to the front. A page that arrives while its
   tab is hidden puts `(new)` in the tab title. The tab icon is a dot in the
@@ -164,9 +179,10 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
   `http(s)`, `mailto` or an in-page anchor. Images are replaced by a text
   reference. Replies often quote web pages, mail or tickets, so the page
   treats its own content as untrusted.
-- Pages hold the text of your replies. They live in `out/` in this folder and
+- Pages hold the text of your replies. They live in `out/` in the plugin's data folder and
   are deleted after 14 days by `present.py prune` (hook mode prunes on its
-  own). `out/`, `present.log`, `settings.json` and `OFF` are gitignored.
+  own). Run outside the plugin, `present.py` keeps them next to itself;
+  `out/`, `present.log`, `settings.json` and `OFF` are gitignored.
 
 ## What was tested
 
@@ -178,9 +194,10 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
 | Safari itself, Claude Code CLI, desktop app | Not yet run. The skill uses nothing specific to one surface |
 | Python 3.8 - 3.13 | Not yet run; written to 3.8 syntax and library |
 
-Run the browser checks:
+Run the checks from the repo root:
 
 ```
+python3 -m unittest discover tests
 npm i playwright
 npx playwright install chromium firefox webkit
 node tests/browser_test.mjs
@@ -188,7 +205,7 @@ node tests/browser_test.mjs
 
 On macOS or Linux set `PYTHON=python3` if `python3` is not the default.
 
-## Optional hook mode
+## Hook mode
 
 With hooks, pages appear without anyone asking: on a reply past 200 words, one
 with a table (80+ words), or one ending in a question (60+ words), and on
@@ -196,8 +213,10 @@ AskUserQuestion and ExitPlanMode. Subagents and unattended sessions are
 skipped, and a turn that already called `show` or `turn` is not presented
 twice.
 
-Add to `~/.claude/settings.json` (append to arrays you already have), with
-the full path to `present.py` and `python` in place of `python3` on Windows:
+The plugin wires these hooks itself (`hooks/hooks.json`); they run while the
+plugin is enabled. On Windows, where the command is `python`, or to use the
+skill without the plugin, add them to `~/.claude/settings.json` instead (append
+to arrays you already have), with the full path to `present.py`:
 
 ```json
 {
