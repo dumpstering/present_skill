@@ -149,6 +149,10 @@ To add a style, add a `:root[data-theme="<id>"]` token block in
   remembered in browser storage.
 - Keys: `V` designed slides, `S` text slides, `D` document, `F` fit to screen,
   `P` full screen, arrows / space / `J` / `K` to move, Home and End.
+- Mouse and touch in slides: one slide per scroll-wheel or trackpad gesture,
+  click to go forward (left 30% of the slide goes back), mouse back/forward
+  buttons, and left/right swipes. Clicks on links, buttons and code keep their
+  own meaning, and selecting text doesn't change slides.
 - If the markdown library fails to load, the reply is shown as plain text.
 
 ## Safety

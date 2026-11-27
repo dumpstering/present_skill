@@ -250,7 +250,7 @@
     keys.replaceChildren();
     if (!state.canToggle) return;
     if (on) {
-      keys.append(el("kbd", "", "\u2190"), " ", el("kbd", "", "\u2192"), " navigate \u00a0 ",
+      keys.append(el("kbd", "", "\u2190"), " ", el("kbd", "", "\u2192"), " or click / scroll to navigate \u00a0 ",
         el("kbd", "", "f"), " fit \u00a0 ", el("kbd", "", "p"), " full screen \u00a0 ");
     }
     keys.append(el("kbd", "", "d"), " ", el("kbd", "", "s"), " ", el("kbd", "", "v"), " views");
@@ -978,6 +978,54 @@
     if (key === "home") { state.slide = 0; showSlide(); ev.preventDefault(); }
     if (key === "end") { state.slide = last; showSlide(); ev.preventDefault(); }
   });
+  // ---------- mouse and touch in slides: wheel, click, side buttons, swipe ----------
+  var WHEEL_STEP = 60, WHEEL_QUIET_MS = 450, LINE_PX = 40, SWIPE_MIN = 50, CLICK_BACK_ZONE = 0.3;
+  // Clicks on these keep their own meaning instead of changing slides.
+  var CLICKABLE = "a, button, input, select, textarea, summary, pre, code, .opt";
+  var wheel = { sum: 0, last: 0, lockedUntil: 0 }, touchX = null;
+  function slidesOn() { return $("doc").classList.contains("slides"); }
+
+  // A trackpad flick sends a long burst of wheel events with momentum. Step once per burst:
+  // after a step, events keep the lock alive until the wheel has been quiet for a moment.
+  $("article").addEventListener("wheel", function (ev) {
+    if (!slidesOn() || ev.ctrlKey) return;  // ctrl+wheel is pinch zoom
+    ev.preventDefault();
+    var now = Date.now(), d = Math.abs(ev.deltaY) >= Math.abs(ev.deltaX) ? ev.deltaY : ev.deltaX;
+    if (ev.deltaMode === 1) d *= LINE_PX;
+    if (now < wheel.lockedUntil) { wheel.lockedUntil = now + WHEEL_QUIET_MS; return; }
+    if (now - wheel.last > WHEEL_QUIET_MS) wheel.sum = 0;
+    wheel.last = now;
+    wheel.sum += d;
+    if (Math.abs(wheel.sum) < WHEEL_STEP) return;
+    step(wheel.sum > 0 ? 1 : -1);
+    wheel.sum = 0;
+    wheel.lockedUntil = now + WHEEL_QUIET_MS;
+  }, { passive: false });
+
+  $("article").addEventListener("click", function (ev) {
+    if (!slidesOn() || ev.button !== 0 || ev.target.closest(CLICKABLE)) return;
+    if (String(window.getSelection() || "")) return;  // the end of a text selection, not a click
+    var box = this.getBoundingClientRect();
+    step(ev.clientX - box.left < box.width * CLICK_BACK_ZONE ? -1 : 1);
+  });
+
+  // Mouse side buttons: 3 is back, 4 is forward.
+  document.addEventListener("mouseup", function (ev) {
+    if (!slidesOn() || (ev.button !== 3 && ev.button !== 4)) return;
+    ev.preventDefault();
+    step(ev.button === 4 ? 1 : -1);
+  });
+
+  $("article").addEventListener("touchstart", function (ev) {
+    touchX = ev.touches.length === 1 ? ev.touches[0].clientX : null;
+  }, { passive: true });
+  $("article").addEventListener("touchend", function (ev) {
+    if (touchX === null || !slidesOn()) return;
+    var dx = ev.changedTouches[0].clientX - touchX;
+    touchX = null;
+    if (Math.abs(dx) >= SWIPE_MIN) step(dx < 0 ? 1 : -1);
+  });
+
   // Browsers slow timers in background tabs, so also check the moment the tab is looked at.
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) return;

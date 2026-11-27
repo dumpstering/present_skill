@@ -327,6 +327,26 @@ for (const [name, engine] of Object.entries(engines)) {
         && orders.copy === 1 && /loose threads/i.test(orders.label),
       JSON.stringify(orders));
 
+    // Mouse: one slide per wheel gesture, click right to advance and left to go back, mouse side buttons.
+    const mousePage = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    mousePage.on("pageerror", (e) => problems.push(String(e)));
+    await mousePage.goto(pathToFileURL(join(out, "longtest.html")).href);
+    await mousePage.waitForFunction(() => document.getElementById("doc").classList.contains("slides"), null, { timeout: 8000 }).catch(() => {});
+    const at = () => mousePage.locator("#slidecount").innerText().then((t) => t.split(" / ")[0]);
+    const pause = () => new Promise((r) => setTimeout(r, 700));
+    const nav = [];
+    await mousePage.mouse.move(640, 360);
+    await mousePage.mouse.wheel(0, 40); await mousePage.mouse.wheel(0, 40); await mousePage.mouse.wheel(0, 40); await mousePage.mouse.wheel(0, 40);
+    nav.push(await at()); await pause();
+    await mousePage.mouse.wheel(0, -160); nav.push(await at()); await pause();
+    await mousePage.mouse.click(1000, 360); nav.push(await at());
+    await mousePage.mouse.click(120, 360); nav.push(await at());
+    await mousePage.evaluate(() => document.getElementById("article").dispatchEvent(new MouseEvent("mouseup", { button: 4, bubbles: true })));
+    nav.push(await at());
+    await mousePage.evaluate(() => document.getElementById("article").dispatchEvent(new MouseEvent("mouseup", { button: 3, bubbles: true })));
+    nav.push(await at());
+    check("mouse: wheel steps once per gesture, click right/left, side buttons", nav.join(",") === "2,1,2,1,2,1", JSON.stringify(nav));
+
     check("no page errors", problems.length === 0, problems.slice(0, 3).join(" | "));
   } catch (e) {
     check("ran to completion", false, String(e).slice(0, 300));
