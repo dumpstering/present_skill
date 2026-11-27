@@ -504,9 +504,9 @@ def handle_hook(payload):
         if kind:
             present(session_id, cwd, kind, text, None, why, event)
         else:
-            # Short replies go into the history and onto an open page, but never open a tab.
+            # Short replies are presented too; like any reply, they open the session's tab only if none is open yet.
             asks = bool(ENDS_WITH_QUESTION_RE.search(text.strip()))
-            present(session_id, cwd, "question" if asks else "reply", text, None, why, event, "never")
+            present(session_id, cwd, "question" if asks else "reply", text, None, why, event)
         if datetime.now().minute % 10 == 0:
             prune()
 
