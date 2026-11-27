@@ -322,9 +322,11 @@ for (const [name, engine] of Object.entries(engines)) {
     orders.newest = await order();
     orders.copy = await boardPage.locator("#article .thread .tnext .copy").count();
     orders.label = await boardPage.locator("#pill").innerText();
+    orders.tags = await boardPage.evaluate(() => [...document.querySelectorAll("#article .thread .ttags")].map((t) => t.textContent).join("|"));
     check("loose threads board: cards, sort toggle, copyable next step",
       orders.priority === "High,Medium,Low" && orders.effort === "Low,Medium,High" && orders.newest === "Medium,Low,High"
-        && orders.copy === 1 && /loose threads/i.test(orders.label),
+        && orders.copy === 1 && /loose threads/i.test(orders.label)
+        && /mediumone session/.test(orders.tags) && /lowquick/.test(orders.tags) && /highmulti-session/.test(orders.tags),
       JSON.stringify(orders));
 
     // Mouse: one slide per wheel gesture, click right to advance and left to go back, mouse side buttons.
